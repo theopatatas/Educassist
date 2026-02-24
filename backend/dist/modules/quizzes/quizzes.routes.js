@@ -1,0 +1,14 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_middleware_1 = require("../../middleware/auth.middleware");
+const role_middleware_1 = require("../../middleware/role.middleware");
+const quizzes_controller_1 = require("./quizzes.controller");
+const router = (0, express_1.Router)();
+router.get("/me", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("teacher", "student"), quizzes_controller_1.listMyQuizzes);
+router.post("/me", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("teacher"), quizzes_controller_1.createMyQuiz);
+router.patch("/:id", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("teacher"), quizzes_controller_1.updateMyQuiz);
+router.get("/:id/results", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("teacher"), quizzes_controller_1.listMyQuizResults);
+router.post("/:id/start", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("student"), quizzes_controller_1.startMyQuiz);
+router.post("/:id/submit", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("student"), quizzes_controller_1.submitMyQuiz);
+exports.default = router;

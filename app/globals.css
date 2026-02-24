@@ -1,26 +1,128 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --font-size: 16px;
+  --background: #f8f9fb;
+  --foreground: #1a1f2e;
+  --card: #ffffff;
+  --card-foreground: #1a1f2e;
+  --popover: #ffffff;
+  --popover-foreground: #1a1f2e;
+  --primary: #1a4fd6;
+  --primary-foreground: #ffffff;
+  --secondary: #eef2fb;
+  --secondary-foreground: #1a1f2e;
+  --muted: #edf1f7;
+  --muted-foreground: #64748b;
+  --accent: #e6ecf7;
+  --accent-foreground: #1a1f2e;
+  --destructive: #d64545;
+  --destructive-foreground: #ffffff;
+  --border: rgba(15, 23, 42, 0.12);
+  --input: transparent;
+  --input-background: #f1f5fb;
+  --switch-background: #cdd8ee;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --ring: rgba(26, 79, 214, 0.2);
+  --chart-1: #1a4fd6;
+  --chart-2: #38bdf8;
+  --chart-3: #22c55e;
+  --chart-4: #f59e0b;
+  --chart-5: #ec4899;
+  --radius: 0.75rem;
+  --sidebar: #f4f6fb;
+  --sidebar-foreground: #1a1f2e;
+  --sidebar-primary: #1a4fd6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e6ecf7;
+  --sidebar-accent-foreground: #1a1f2e;
+  --sidebar-border: rgba(15, 23, 42, 0.08);
+  --sidebar-ring: rgba(26, 79, 214, 0.2);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #0f172a;
+    --foreground: #e2e8f0;
+    --card: #111c36;
+    --card-foreground: #e2e8f0;
+    --popover: #111c36;
+    --popover-foreground: #e2e8f0;
+    --primary: #7aa2ff;
+    --primary-foreground: #0b1224;
+    --secondary: #1b2a4a;
+    --secondary-foreground: #e2e8f0;
+    --muted: #1b2a4a;
+    --muted-foreground: #94a3b8;
+    --accent: #1f2b49;
+    --accent-foreground: #e2e8f0;
+    --destructive: #f87171;
+    --destructive-foreground: #0b1224;
+    --border: rgba(148, 163, 184, 0.2);
+    --input: #1b2a4a;
+    --ring: rgba(122, 162, 255, 0.35);
+    --chart-1: #7aa2ff;
+    --chart-2: #38bdf8;
+    --chart-3: #4ade80;
+    --chart-4: #fbbf24;
+    --chart-5: #f472b6;
+    --sidebar: #0b1224;
+    --sidebar-foreground: #e2e8f0;
+    --sidebar-primary: #7aa2ff;
+    --sidebar-primary-foreground: #0b1224;
+    --sidebar-accent: #111c36;
+    --sidebar-accent-foreground: #e2e8f0;
+    --sidebar-border: rgba(148, 163, 184, 0.18);
+    --sidebar-ring: rgba(122, 162, 255, 0.35);
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
 }

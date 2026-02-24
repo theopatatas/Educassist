@@ -1,0 +1,17 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_middleware_1 = require("../../middleware/auth.middleware");
+const role_middleware_1 = require("../../middleware/role.middleware");
+const teacher_controller_1 = require("./teacher.controller");
+const router = (0, express_1.Router)();
+router.get("/me", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("teacher"), teacher_controller_1.me);
+router.get("/", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin"), teacher_controller_1.list);
+router.get("/:id", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin"), teacher_controller_1.getById);
+router.post("/", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin"), teacher_controller_1.create);
+router.patch("/:id", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin"), teacher_controller_1.update);
+router.delete("/:id", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin"), teacher_controller_1.remove);
+router.get("/:id/subjects", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin"), teacher_controller_1.listSubjects);
+router.post("/:id/subjects", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin"), teacher_controller_1.addSubject);
+router.post("/me/teaching-load", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("teacher"), teacher_controller_1.addTeachingLoad);
+exports.default = router;
