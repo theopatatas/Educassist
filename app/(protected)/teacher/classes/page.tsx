@@ -7,7 +7,6 @@ import {
   Clock,
   MapPin,
   Plus,
-  BookOpen,
   Calendar,
   X,
   Trash2,

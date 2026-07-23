@@ -1,9 +1,12 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.preview = preview;
 exports.exportReport = exportReport;
+const pdfkit_1 = __importDefault(require("pdfkit"));
 const admin_reports_service_1 = require("./admin-reports.service");
-const PDFDocument = require("pdfkit");
 const reportTypes = new Set(["students", "attendance", "enrollment", "events"]);
 function typeFromRequest(req) {
     return reportTypes.has(req.params.type)
@@ -41,7 +44,7 @@ async function exportReport(req, res) {
     if (format === "pdf") {
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `attachment; filename="${baseName}.pdf"`);
-        const document = new PDFDocument({
+        const document = new pdfkit_1.default({
             margin: 36,
             size: "A4",
             layout: "landscape",

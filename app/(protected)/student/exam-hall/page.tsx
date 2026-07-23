@@ -90,12 +90,6 @@ function resolveExamBuildingRoom(building?: string | null, room?: string | null)
   };
 }
 
-const statusPill = (status: ExamStatus) => {
-  if (status === "Scheduled") return "bg-amber-100 text-amber-700";
-  if (status === "Completed") return "bg-green-100 text-green-700";
-  return "bg-gray-100 text-gray-600";
-};
-
 function mapApiExamToItem(exam: ApiExam): ExamItem {
   const cleanCoverage = (Array.isArray(exam.coverage) ? exam.coverage : []).filter(
     (item) => String(item).trim().toLowerCase() !== "set coverage topics here"

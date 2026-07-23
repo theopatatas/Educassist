@@ -15,8 +15,8 @@ import {
 } from "./quizzes.service";
 
 export async function listMyQuizzes(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
-  const role = (req as any).user?.role as string | undefined;
+  const userId = req.user?.sub;
+  const role = req.user?.role;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
 
   const quizzes = role === "student" ? await listQuizzesForStudent(userId) : await listQuizzesForTeacher(userId);
@@ -27,7 +27,7 @@ export async function listMyQuizzes(req: Request, res: Response) {
 }
 
 export async function createMyQuiz(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
+  const userId = req.user?.sub;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
 
   const quiz = await createQuizForTeacher(userId, req.body ?? {});
@@ -39,8 +39,8 @@ export async function createMyQuiz(req: Request, res: Response) {
 }
 
 export async function getMyQuiz(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
-  const role = (req as any).user?.role as string | undefined;
+  const userId = req.user?.sub;
+  const role = req.user?.role;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
 
   const result =
@@ -58,7 +58,7 @@ export async function getMyQuiz(req: Request, res: Response) {
 }
 
 export async function updateMyQuiz(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
+  const userId = req.user?.sub;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
 
   const quiz = await updateQuizForTeacher(userId, req.params.id, req.body ?? {});
@@ -69,7 +69,7 @@ export async function updateMyQuiz(req: Request, res: Response) {
 }
 
 export async function saveMyQuizQuestions(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
+  const userId = req.user?.sub;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
 
   const quiz = await saveQuizQuestionsForTeacher(userId, req.params.id, req.body?.questions ?? []);
@@ -79,7 +79,7 @@ export async function saveMyQuizQuestions(req: Request, res: Response) {
 }
 
 export async function startMyQuiz(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
+  const userId = req.user?.sub;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
 
   const result = await startQuizForStudent(userId, req.params.id);
@@ -92,7 +92,7 @@ export async function startMyQuiz(req: Request, res: Response) {
 }
 
 export async function submitMyQuiz(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
+  const userId = req.user?.sub;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
 
   const result = await submitQuizForStudent(userId, req.params.id, req.body?.answers ?? []);
@@ -105,7 +105,7 @@ export async function submitMyQuiz(req: Request, res: Response) {
 }
 
 export async function leaveMyQuiz(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
+  const userId = req.user?.sub;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
 
   const result = await leaveQuizForStudent(userId, req.params.id);
@@ -115,7 +115,7 @@ export async function leaveMyQuiz(req: Request, res: Response) {
 }
 
 export async function listMyQuizResults(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
+  const userId = req.user?.sub;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
 
   const result = await listQuizResultsForTeacher(userId, req.params.id);
@@ -125,7 +125,7 @@ export async function listMyQuizResults(req: Request, res: Response) {
 }
 
 export async function getMyQuizAnalytics(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
+  const userId = req.user?.sub;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
 
   const result = await getQuizAnalyticsForTeacher(userId, req.params.id);

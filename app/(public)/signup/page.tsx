@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/src/features/auth/hooks";
 import { requestRegisterOtpApi, verifyRegisterOtpApi } from "@/src/features/auth/api";
+import { getApiErrorMessage } from "@/src/lib/http/errorMessage";
 
 const schema = z
   .object({
@@ -72,11 +73,20 @@ export default function SignUpPage() {
   }, [hydrated, user, router]);
 
   const buildSignupPayload = (values: FormValues): SignupPayload => {
-    const { confirmPassword, ...payload } = values;
-    const rawSection = payload.sectionId.trim();
+    const rawSection = values.sectionId.trim();
     const parsedSectionId = Number(rawSection);
     return {
-      ...payload,
+      email: values.email,
+      password: values.password,
+      firstName: values.firstName,
+      lastName: values.lastName,
+      lrn: values.lrn,
+      yearLevel: values.yearLevel,
+      middleName: values.middleName,
+      birthDate: values.birthDate,
+      gender: values.gender,
+      guardianName: values.guardianName,
+      guardianContact: values.guardianContact,
       sectionId: Number.isFinite(parsedSectionId) ? parsedSectionId : undefined,
       sectionName: rawSection || undefined,
     };
@@ -93,8 +103,8 @@ export default function SignUpPage() {
       setPendingEmail(result.email || signupPayload.email);
       setSignupStatus(result.message || "OTP sent to your email address.");
       setOtpModalOpen(true);
-    } catch (err: any) {
-      setSignupError(err?.response?.data?.message || "Failed to send OTP.");
+    } catch (err: unknown) {
+      setSignupError(getApiErrorMessage(err, "Failed to send OTP."));
     }
   };
 
@@ -112,8 +122,8 @@ export default function SignUpPage() {
       await verifyRegisterOtpApi({ email: pendingEmail, otp: otp.trim() });
       logout();
       router.replace("/login");
-    } catch (err: any) {
-      setSignupError(err?.response?.data?.message || "Failed to verify OTP.");
+    } catch (err: unknown) {
+      setSignupError(getApiErrorMessage(err, "Failed to verify OTP."));
     } finally {
       setOtpSubmitting(false);
     }
@@ -174,8 +184,8 @@ export default function SignUpPage() {
       const result = await requestRegisterOtpApi(pendingSignup);
       setPendingEmail(result.email || pendingSignup.email);
       setSignupStatus(result.message || "OTP resent to your email address.");
-    } catch (err: any) {
-      setSignupError(err?.response?.data?.message || "Failed to resend OTP.");
+    } catch (err: unknown) {
+      setSignupError(getApiErrorMessage(err, "Failed to resend OTP."));
     } finally {
       setOtpResending(false);
     }

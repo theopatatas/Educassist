@@ -10,6 +10,7 @@ import {
   addTeachingLoadForTeacher,
   updateTeacher,
 } from "./teacher.service";
+import { hasErrorName } from "../../utils/errors";
 
 export async function create(req: Request, res: Response) {
   if (!req.body?.employeeNumber) {
@@ -35,7 +36,7 @@ export async function getById(req: Request, res: Response) {
 }
 
 export async function me(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
+  const userId = req.user?.sub;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
 
   const teacher = await getTeacherByUserId(userId);
@@ -54,8 +55,8 @@ export async function update(req: Request, res: Response) {
     const teacher = await updateTeacher(req.params.id, req.body ?? {});
     if (!teacher) return res.status(404).json({ ok: false, message: "Teacher not found" });
     return res.json({ ok: true, teacher });
-  } catch (error: any) {
-    if (error?.name === "SequelizeUniqueConstraintError") {
+  } catch (error: unknown) {
+    if (hasErrorName(error, "SequelizeUniqueConstraintError")) {
       return res.status(409).json({ ok: false, message: "Email is already in use" });
     }
     throw error;
@@ -82,7 +83,7 @@ export async function addSubject(req: Request, res: Response) {
 }
 
 export async function addTeachingLoad(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
+  const userId = req.user?.sub;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
   const entries = Array.isArray(req.body?.entries) ? req.body.entries : [];
   if (entries.length === 0) {

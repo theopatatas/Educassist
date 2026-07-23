@@ -110,7 +110,7 @@ export async function registerUser(input: {
   const normalizedEmail = input.email.trim().toLowerCase();
 
   return sequelize.transaction(async (t) => {
-    return createStudentAccount(input, t);
+    return createStudentAccount({ ...input, email: normalizedEmail }, t);
   });
 }
 

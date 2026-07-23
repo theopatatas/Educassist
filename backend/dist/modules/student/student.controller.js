@@ -12,6 +12,7 @@ exports.promote = promote;
 exports.undoPromotion = undoPromotion;
 exports.remove = remove;
 const student_service_1 = require("./student.service");
+const errors_1 = require("../../utils/errors");
 async function create(req, res) {
     const result = await (0, student_service_1.createStudent)(req.body);
     if (!result.ok)
@@ -65,7 +66,7 @@ async function update(req, res) {
         return res.json({ ok: true, student });
     }
     catch (error) {
-        if (error?.name === "SequelizeUniqueConstraintError") {
+        if ((0, errors_1.hasErrorName)(error, "SequelizeUniqueConstraintError")) {
             return res
                 .status(409)
                 .json({ ok: false, message: "Email is already in use" });

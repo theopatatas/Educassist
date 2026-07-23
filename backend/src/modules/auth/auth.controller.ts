@@ -22,6 +22,7 @@ import {
   verifyStudentSignupOtp,
   verifyUserPassword,
 } from "./auth.service";
+import { getErrorFieldNames, hasErrorName } from "../../utils/errors";
 
 export async function register(req: Request, res: Response) {
   const input = registerSchema.safeParse(req.body);
@@ -36,9 +37,9 @@ export async function register(req: Request, res: Response) {
     }
 
     return res.status(201).json(result);
-  } catch (err: any) {
-    if (err?.name === "SequelizeUniqueConstraintError") {
-      const fields = Object.keys(err?.fields ?? {});
+  } catch (err: unknown) {
+    if (hasErrorName(err, "SequelizeUniqueConstraintError")) {
+      const fields = getErrorFieldNames(err);
       if (fields.includes("email")) {
         return res.status(409).json({ ok: false, message: "Email already in use" });
       }
@@ -47,7 +48,7 @@ export async function register(req: Request, res: Response) {
       }
       return res.status(409).json({ ok: false, message: "Duplicate data already exists" });
     }
-    if (err?.name === "SequelizeForeignKeyConstraintError") {
+    if (hasErrorName(err, "SequelizeForeignKeyConstraintError")) {
       return res.status(400).json({ ok: false, message: "Invalid related data (check Section)." });
     }
     throw err;
@@ -113,7 +114,7 @@ export async function refreshSession(req: Request, res: Response) {
 }
 
 export async function changePassword(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
+  const userId = req.user?.sub;
   if (!userId) {
     return res.status(401).json({ ok: false, message: "Unauthorized" });
   }
@@ -136,7 +137,7 @@ export async function changePassword(req: Request, res: Response) {
 }
 
 export async function verifyPassword(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
+  const userId = req.user?.sub;
   const password = typeof req.body?.password === "string" ? req.body.password : "";
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
   if (!password) return res.status(400).json({ ok: false, message: "Password is required" });

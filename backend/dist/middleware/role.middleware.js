@@ -2,6 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.requireRole = requireRole;
 const Student_model_1 = require("../db/models/Student.model");
+function isUserRole(role) {
+    return ["super_admin", "admin", "teacher", "student", "parent"].includes(role);
+}
 function requireRole(...roles) {
     return async (req, res, next) => {
         const user = req.user;
@@ -11,7 +14,10 @@ function requireRole(...roles) {
             ? roles.includes("admin")
             : user.role === "admin"
                 ? roles.includes("managed_admin")
-                : roles.includes(user.role);
+                : isUserRole(user.role) &&
+                    user.role !== "super_admin" &&
+                    user.role !== "admin" &&
+                    roles.includes(user.role);
         if (!allowed)
             return res.status(403).json({ ok: false, message: "Forbidden" });
         if (user.role === "student" && user.sub) {

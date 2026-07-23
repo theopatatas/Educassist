@@ -12,6 +12,7 @@ import {
   undoStudentPromotion,
   updateStudent,
 } from "./student.service";
+import { hasErrorName } from "../../utils/errors";
 
 export async function create(req: Request, res: Response) {
   const result = await createStudent(req.body);
@@ -72,8 +73,8 @@ export async function update(req: Request, res: Response) {
     if (!student)
       return res.status(404).json({ ok: false, message: "Student not found" });
     return res.json({ ok: true, student });
-  } catch (error: any) {
-    if (error?.name === "SequelizeUniqueConstraintError") {
+  } catch (error: unknown) {
+    if (hasErrorName(error, "SequelizeUniqueConstraintError")) {
       return res
         .status(409)
         .json({ ok: false, message: "Email is already in use" });

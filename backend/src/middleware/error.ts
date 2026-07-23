@@ -1,11 +1,26 @@
-import type { NextFunction, Request, Response } from "express";
+import type { ErrorRequestHandler } from "express";
 
-export function errorHandler(err: any, _req: Request, res: Response, _next: NextFunction) {
-  console.error(err);
-  const status = err?.statusCode || err?.status || 500;
+type HttpError = {
+  statusCode?: number;
+  status?: number;
+  message?: string;
+};
 
+export const errorHandler: ErrorRequestHandler = (
+  error: unknown,
+  _req,
+  res,
+  next,
+) => {
+  void next;
+  console.error(error);
+  const err =
+    typeof error === "object" && error !== null
+      ? (error as HttpError)
+      : {};
+  const status = err.statusCode || err.status || 500;
   res.status(status).json({
     ok: false,
-    message: err?.message || "Internal Server Error",
+    message: err.message || "Internal Server Error",
   });
-}
+};

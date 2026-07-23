@@ -10,6 +10,7 @@ exports.listSubjects = listSubjects;
 exports.addSubject = addSubject;
 exports.addTeachingLoad = addTeachingLoad;
 const teacher_service_1 = require("./teacher.service");
+const errors_1 = require("../../utils/errors");
 async function create(req, res) {
     if (!req.body?.employeeNumber) {
         return res.status(400).json({ ok: false, message: "Employee number is required" });
@@ -55,7 +56,7 @@ async function update(req, res) {
         return res.json({ ok: true, teacher });
     }
     catch (error) {
-        if (error?.name === "SequelizeUniqueConstraintError") {
+        if ((0, errors_1.hasErrorName)(error, "SequelizeUniqueConstraintError")) {
             return res.status(409).json({ ok: false, message: "Email is already in use" });
         }
         throw error;

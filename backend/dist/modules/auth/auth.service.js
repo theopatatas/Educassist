@@ -77,7 +77,7 @@ async function ensureGuardianAccountForStudent(input, studentId, transaction) {
 async function registerUser(input) {
     const normalizedEmail = input.email.trim().toLowerCase();
     return db_1.sequelize.transaction(async (t) => {
-        return createStudentAccount(input, t);
+        return createStudentAccount({ ...input, email: normalizedEmail }, t);
     });
 }
 async function ensureStudentRegistrationAvailable(input, transaction) {

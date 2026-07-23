@@ -98,18 +98,6 @@ function isPastExamSchedule(date?: string, startTime?: string) {
   return date < getTodayDateInputValue();
 }
 
-function statusPill(status: ExamStatus) {
-  if (status === "Scheduled") return "bg-amber-100 text-amber-700";
-  if (status === "Completed") return "bg-green-100 text-green-700";
-  return "bg-gray-100 text-gray-600";
-}
-
-function gradingPill(status: TeacherExam["gradingStatus"]) {
-  if (status === "Done") return "bg-green-100 text-green-700";
-  if (status === "In Progress") return "bg-blue-100 text-blue-700";
-  return "bg-gray-100 text-gray-600";
-}
-
 function mapApiExam(exam: ApiExam): TeacherExam {
   return {
     id: Number(exam.id),
@@ -308,18 +296,6 @@ export default function TeacherExamHallPage() {
 
   const scheduledCount = useMemo(() => filteredExams.filter((e) => e.status === "Scheduled").length, [filteredExams]);
 
-  const togglePublish = async (id: number) => {
-    const exam = exams.find((e) => e.id === id);
-    if (!exam) return;
-    try {
-      await api.patch(`/api/exams/${id}`, { publishResults: !exam.publishResults });
-      await loadData();
-      setSelectedExam((prev) => (prev && prev.id === id ? { ...prev, publishResults: !prev.publishResults } : prev));
-    } catch {
-      setSaveError("Failed to update publish status.");
-    }
-  };
-
   const markCompleted = async (exam: TeacherExam) => {
     setSaveError("");
     setSaveSuccess("");
@@ -338,16 +314,6 @@ export default function TeacherExamHallPage() {
       setSaveError(message);
     } finally {
       setIsDeletingExam(false);
-    }
-  };
-
-  const setGradingStatus = async (id: number, gradingStatus: TeacherExam["gradingStatus"]) => {
-    try {
-      await api.patch(`/api/exams/${id}`, { gradingStatus });
-      await loadData();
-      setSelectedExam((prev) => (prev && prev.id === id ? { ...prev, gradingStatus } : prev));
-    } catch {
-      setSaveError("Failed to update grading status.");
     }
   };
 

@@ -1,5 +1,7 @@
 import { env } from "../config/env";
 
+const EDUCASSIST_MAIL_NAME = "EducAssist";
+
 type SendMailInput = {
   to: string;
   toName?: string;
@@ -22,6 +24,8 @@ export async function sendMail(input: SendMailInput) {
     body: JSON.stringify({
       to: input.to,
       to_name: input.toName ?? "",
+      from_name: EDUCASSIST_MAIL_NAME,
+      reply_to_name: EDUCASSIST_MAIL_NAME,
       subject: input.subject,
       html: input.html,
       text: input.text ?? "",

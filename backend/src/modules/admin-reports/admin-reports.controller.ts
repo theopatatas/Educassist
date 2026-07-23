@@ -1,13 +1,6 @@
 import type { Request, Response } from "express";
+import PDFDocument from "pdfkit";
 import { buildAdminReport, type ReportType } from "./admin-reports.service";
-
-const PDFDocument: new (options?: object) => {
-  fontSize(size: number): any;
-  text(text: string, options?: object): any;
-  moveDown(amount?: number): any;
-  pipe(stream: NodeJS.WritableStream): void;
-  end(): void;
-} = require("pdfkit");
 
 const reportTypes = new Set(["students", "attendance", "enrollment", "events"]);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/src/lib/http/client";
 import { ArrowLeft, CheckCircle2, Clock, XCircle } from "lucide-react";
@@ -62,6 +62,7 @@ export default function StudentTakeQuizPage() {
   const router = useRouter();
   const quizId = String(params?.id ?? "");
   const autoSubmittedRef = useRef(false);
+  const submissionInFlightRef = useRef(false);
 
   const [quiz, setQuiz] = useState<QuizDetail | null>(null);
   const [answers, setAnswers] = useState<Record<number, unknown>>({});
@@ -131,8 +132,14 @@ export default function StudentTakeQuizPage() {
     return () => window.clearInterval(interval);
   }, [quiz, result]);
 
-  const handleSubmit = async () => {
-    if (!quiz || isSubmitting || quiz.myAttempt === "Submitted") return;
+  const handleSubmit = useCallback(async () => {
+    if (
+      !quiz ||
+      submissionInFlightRef.current ||
+      quiz.myAttempt === "Submitted"
+    )
+      return;
+    submissionInFlightRef.current = true;
     setIsSubmitting(true);
     setError("");
 
@@ -152,15 +159,16 @@ export default function StudentTakeQuizPage() {
         "Failed to submit quiz.";
       setError(message);
     } finally {
+      submissionInFlightRef.current = false;
       setIsSubmitting(false);
     }
-  };
+  }, [answers, quiz]);
 
   useEffect(() => {
     if (timeLeft !== 0 || autoSubmittedRef.current) return;
     autoSubmittedRef.current = true;
     void handleSubmit();
-  }, [timeLeft]);
+  }, [handleSubmit, timeLeft]);
 
   const answeredCount = useMemo(
     () =>
@@ -182,7 +190,7 @@ export default function StudentTakeQuizPage() {
     const penaltyPoints = Number(quiz?.penaltyPoints ?? result?.penaltyPoints ?? 0);
     const earnedPoints = Math.max(0, rawEarnedPoints - penaltyPoints);
     return { correct, wrong, earnedPoints, totalPoints, penaltyPoints };
-  }, [quiz]);
+  }, [quiz, result?.penaltyPoints]);
 
   const setAnswer = (questionId: number, value: unknown) => {
     if (quiz?.myAttempt === "Submitted") return;

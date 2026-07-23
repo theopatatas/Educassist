@@ -205,7 +205,8 @@ export async function update(req: Request, res: Response) {
         message: "Mobile number must contain 11 digits beginning with 09",
       });
     }
-    const { superAdminPassword: _password, ...updates } = req.body ?? {};
+    const updates = { ...(req.body ?? {}) };
+    delete updates.superAdminPassword;
     const user = await updateUser(req.params.id, updates);
     if (!user)
       return res.status(404).json({ ok: false, message: "User not found" });

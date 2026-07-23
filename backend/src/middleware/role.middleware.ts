@@ -1,13 +1,16 @@
 import type { Request, Response, NextFunction } from "express";
 import { Student } from "../db/models/Student.model";
+import type { RouteRole, UserRole } from "../types/auth";
 
-export function requireRole(
-  ...roles: Array<"admin" | "managed_admin" | "teacher" | "student" | "parent">
-) {
+function isUserRole(role: string): role is UserRole {
+  return ["super_admin", "admin", "teacher", "student", "parent"].includes(
+    role,
+  );
+}
+
+export function requireRole(...roles: RouteRole[]) {
   return async (req: Request, res: Response, next: NextFunction) => {
-    const user = (req as any).user as
-      | { role?: string; sub?: string }
-      | undefined;
+    const user = req.user;
     if (!user?.role)
       return res.status(401).json({ ok: false, message: "Unauthorized" });
     const allowed =
@@ -15,7 +18,10 @@ export function requireRole(
         ? roles.includes("admin")
         : user.role === "admin"
           ? roles.includes("managed_admin")
-          : roles.includes(user.role as "teacher" | "student" | "parent");
+          : isUserRole(user.role) &&
+            user.role !== "super_admin" &&
+            user.role !== "admin" &&
+            roles.includes(user.role);
     if (!allowed)
       return res.status(403).json({ ok: false, message: "Forbidden" });
     if (user.role === "student" && user.sub) {

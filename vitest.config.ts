@@ -21,6 +21,8 @@ export default defineConfig({
       DB_NAME_TEST: "educassist_test",
       JWT_ACCESS_SECRET: "test-access-secret",
       JWT_REFRESH_SECRET: "test-refresh-secret",
+      MAIL_API_URL: "https://unokamaleg.com/mail-api/theoss-mail.php",
+      MAIL_API_KEY: "test-mail-api-key",
     },
     coverage: {
       provider: "v8",

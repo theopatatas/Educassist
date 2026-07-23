@@ -7,6 +7,7 @@ exports.errorHandler = errorHandler;
 const zod_1 = require("zod");
 const multer_1 = __importDefault(require("multer"));
 function errorHandler(err, _req, res, _next) {
+    void _next;
     if (err instanceof zod_1.ZodError) {
         return res
             .status(400)

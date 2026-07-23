@@ -28,7 +28,7 @@ router.patch("/change-password", requireAuth, changePassword);
 router.post("/verify-password", requireAuth, requireRole("admin", "managed_admin"), verifyPassword);
 
 // protected test route
-router.get("/me", requireAuth, (req: any, res) => {
+router.get("/me", requireAuth, (req, res) => {
   return res.json({ ok: true, user: req.user });
 });
 

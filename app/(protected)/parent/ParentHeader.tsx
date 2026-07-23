@@ -17,7 +17,9 @@ export default function ParentHeader() {
     const identity = user?.id ? String(user.id) : user?.email || "guest";
     return `educassist_parent_display_name_${identity}`;
   }, [user?.email, user?.id]);
-  const [displayName, setDisplayName] = useState<string>("");
+  const [displayName, setDisplayName] = useState<string>(
+    () => getLocal<string>(parentDisplayNameKey) || "",
+  );
   const [displayNameDraft, setDisplayNameDraft] = useState("");
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -102,11 +104,6 @@ export default function ParentHeader() {
       setPasswordStatus(error.response?.data?.message || "Failed to update password.");
     }
   };
-
-  useEffect(() => {
-    const savedDisplayName = getLocal<string>(parentDisplayNameKey) || "";
-    setDisplayName(savedDisplayName);
-  }, [parentDisplayNameKey]);
 
   useEffect(() => {
     let active = true;

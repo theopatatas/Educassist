@@ -10,7 +10,7 @@ function requireAuth(req, res, next) {
     const token = header.slice("Bearer ".length);
     try {
         const payload = (0, jwt_1.verifyAccessToken)(token);
-        req.user = payload; // or req.user if you typed it
+        req.user = payload;
         return next();
     }
     catch {

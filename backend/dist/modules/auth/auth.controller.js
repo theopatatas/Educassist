@@ -12,6 +12,7 @@ exports.verifyPasswordResetOtp = verifyPasswordResetOtp;
 exports.resetPasswordWithOtp = resetPasswordWithOtp;
 const auth_schemas_1 = require("./auth.schemas");
 const auth_service_1 = require("./auth.service");
+const errors_1 = require("../../utils/errors");
 async function register(req, res) {
     const input = auth_schemas_1.registerSchema.safeParse(req.body);
     if (!input.success) {
@@ -25,8 +26,8 @@ async function register(req, res) {
         return res.status(201).json(result);
     }
     catch (err) {
-        if (err?.name === "SequelizeUniqueConstraintError") {
-            const fields = Object.keys(err?.fields ?? {});
+        if ((0, errors_1.hasErrorName)(err, "SequelizeUniqueConstraintError")) {
+            const fields = (0, errors_1.getErrorFieldNames)(err);
             if (fields.includes("email")) {
                 return res.status(409).json({ ok: false, message: "Email already in use" });
             }
@@ -35,7 +36,7 @@ async function register(req, res) {
             }
             return res.status(409).json({ ok: false, message: "Duplicate data already exists" });
         }
-        if (err?.name === "SequelizeForeignKeyConstraintError") {
+        if ((0, errors_1.hasErrorName)(err, "SequelizeForeignKeyConstraintError")) {
             return res.status(400).json({ ok: false, message: "Invalid related data (check Section)." });
         }
         throw err;

@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendMail = sendMail;
 const env_1 = require("../config/env");
+const EDUCASSIST_MAIL_NAME = "EducAssist";
 async function sendMail(input) {
     if (!env_1.env.MAIL_API_URL || !env_1.env.MAIL_API_KEY) {
         throw new Error("Mail API is not configured");
@@ -15,6 +16,8 @@ async function sendMail(input) {
         body: JSON.stringify({
             to: input.to,
             to_name: input.toName ?? "",
+            from_name: EDUCASSIST_MAIL_NAME,
+            reply_to_name: EDUCASSIST_MAIL_NAME,
             subject: input.subject,
             html: input.html,
             text: input.text ?? "",

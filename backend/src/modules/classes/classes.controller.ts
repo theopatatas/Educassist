@@ -16,8 +16,8 @@ import {
 } from "./classes.service";
 
 export async function listMyClasses(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
-  const role = (req as any).user?.role as string | undefined;
+  const userId = req.user?.sub;
+  const role = req.user?.role;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
   const classes =
     role === "student" ? await listClassesForStudent(userId) : await listClassesForTeacher(userId);
@@ -31,7 +31,7 @@ export async function listMyClasses(req: Request, res: Response) {
 }
 
 export async function getMyClassFormOptions(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
+  const userId = req.user?.sub;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
 
   const options = await getClassFormOptionsForTeacher(userId);
@@ -43,7 +43,7 @@ export async function getMyClassFormOptions(req: Request, res: Response) {
 }
 
 export async function createMyClass(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
+  const userId = req.user?.sub;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
   const cls = await createClassForTeacher(userId, req.body ?? {});
   if (!cls) return res.status(404).json({ ok: false, message: "Teacher profile not found" });
@@ -51,7 +51,7 @@ export async function createMyClass(req: Request, res: Response) {
 }
 
 export async function updateMyClass(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
+  const userId = req.user?.sub;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
   const result = await updateClassForTeacher(userId, req.params.id, req.body ?? {});
   if (result === null) return res.status(404).json({ ok: false, message: "Teacher profile not found" });
@@ -60,7 +60,7 @@ export async function updateMyClass(req: Request, res: Response) {
 }
 
 export async function deleteMyClass(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
+  const userId = req.user?.sub;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
   const password = typeof req.body?.password === "string" ? req.body.password : "";
   if (!password.trim()) {
@@ -76,7 +76,7 @@ export async function deleteMyClass(req: Request, res: Response) {
 }
 
 export async function listMyClassStudents(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
+  const userId = req.user?.sub;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
 
   const result = await listStudentsForTeacherClass(userId, req.params.id);
@@ -86,8 +86,8 @@ export async function listMyClassStudents(req: Request, res: Response) {
 }
 
 export async function getMyAttendance(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
-  const role = (req as any).user?.role as string | undefined;
+  const userId = req.user?.sub;
+  const role = req.user?.role;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
 
   if (role === "student") {
@@ -102,7 +102,7 @@ export async function getMyAttendance(req: Request, res: Response) {
 }
 
 export async function saveMyAttendance(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
+  const userId = req.user?.sub;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
 
   const date = typeof req.body?.date === "string" ? req.body.date : "";
@@ -117,8 +117,8 @@ export async function saveMyAttendance(req: Request, res: Response) {
 }
 
 export async function getMyGrades(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
-  const role = (req as any).user?.role as string | undefined;
+  const userId = req.user?.sub;
+  const role = req.user?.role;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
 
   if (role === "student") {
@@ -138,7 +138,7 @@ export async function getMyGrades(req: Request, res: Response) {
 }
 
 export async function publishMyGrades(req: Request, res: Response) {
-  const userId = (req as any).user?.sub as string | undefined;
+  const userId = req.user?.sub;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
   const body = req.body ?? {};
   const rows = Array.isArray(body.rows) ? body.rows : [];

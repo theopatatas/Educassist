@@ -1,10 +1,13 @@
 import type { Request, Response, NextFunction } from "express";
 import { Class, Enrollment } from "../db/models"; // adjust to your models export
+import type { ScopedAuthenticatedRequest } from "../types/auth";
+
+type ClassScopedRequest = ScopedAuthenticatedRequest<{ class?: Class }>;
 
 export function teacherOwnsClass(paramName = "id") {
   return async (req: Request, res: Response, next: NextFunction) => {
     const classId = req.params[paramName];
-    const userId = (req as any).user?.sub;
+    const userId = req.user?.sub;
 
     const cls = await Class.findByPk(classId);
     if (!cls) return res.status(404).json({ ok: false, message: "Class not found" });
@@ -12,7 +15,7 @@ export function teacherOwnsClass(paramName = "id") {
     if (String(cls.teacherId) !== String(userId)) {
       return res.status(403).json({ ok: false, message: "Forbidden (not your class)" });
     }
-    (req as any).class = cls;
+    (req as ClassScopedRequest).class = cls;
     return next();
   };
 }
@@ -20,7 +23,7 @@ export function teacherOwnsClass(paramName = "id") {
 export function studentEnrolledInClass(paramName = "id") {
   return async (req: Request, res: Response, next: NextFunction) => {
     const classId = req.params[paramName];
-    const userId = (req as any).user?.sub;
+    const userId = req.user?.sub;
 
     const enr = await Enrollment.findOne({ where: { classId, studentId: userId } });
     if (!enr) return res.status(403).json({ ok: false, message: "Not enrolled in class" });

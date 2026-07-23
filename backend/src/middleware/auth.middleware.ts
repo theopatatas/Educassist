@@ -13,7 +13,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 
   try {
     const payload = verifyAccessToken(token);
-    (req as any).user = payload; // or req.user if you typed it
+    req.user = payload;
     return next();
   } catch {
     return res.status(401).json({ ok: false, message: "Invalid or expired token" });

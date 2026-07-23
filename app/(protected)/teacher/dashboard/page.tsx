@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/src/lib/http/client";
 import {
-  Clock,
   BookOpen,
   X,
   ChevronLeft,
@@ -127,6 +126,7 @@ export default function TeacherDashboard() {
   const [teacherClasses, setTeacherClasses] = useState<ApiClass[]>([]);
 
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [dashboardNow] = useState(() => Date.now());
   const [selectedDateEvents, setSelectedDateEvents] =
     useState<SelectedDateEvents | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -173,12 +173,11 @@ export default function TeacherDashboard() {
     [events, currentDate],
   );
   const upcomingDeadlines = useMemo(() => {
-    const now = Date.now();
     return events
-      .filter((event) => event.sortTimestamp >= now)
+      .filter((event) => event.sortTimestamp >= dashboardNow)
       .sort((a, b) => a.sortTimestamp - b.sortTimestamp)
       .slice(0, 6);
-  }, [events]);
+  }, [dashboardNow, events]);
 
   const changeMonth = (delta: number) => {
     setCurrentDate((prev) => {
@@ -525,11 +524,6 @@ export default function TeacherDashboard() {
                       d.getFullYear() === currentDate.getFullYear()
                     );
                   });
-                  const visibleDayEvents = dayEvents.slice(0, 2);
-                  const hiddenEventsCount = Math.max(
-                    0,
-                    dayEvents.length - visibleDayEvents.length,
-                  );
                   return (
                     <div
                       key={day}

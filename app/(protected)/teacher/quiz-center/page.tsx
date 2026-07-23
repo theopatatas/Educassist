@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/src/lib/http/client";
-import { CheckCircle2, Clock, ChevronDown, ChevronRight, BarChart2, Plus, X, Calendar } from "lucide-react";
+import { CheckCircle2, Clock, ChevronDown, BarChart2, Plus, X, Calendar } from "lucide-react";
 
 type QuizItem = {
   id: number;

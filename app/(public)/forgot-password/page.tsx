@@ -6,6 +6,7 @@ import {
   resetPasswordWithOtpApi,
   verifyForgotPasswordOtpApi,
 } from "@/src/features/auth/api";
+import { getApiErrorMessage } from "@/src/lib/http/errorMessage";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -35,8 +36,8 @@ export default function ForgotPasswordPage() {
       const res = await requestForgotPasswordOtpApi(email.trim());
       setStatus(res.message || "If the email exists, an OTP has been sent.");
       setOtpSent(true);
-    } catch (err: any) {
-      setError(err?.response?.data?.message || "Failed to send OTP");
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, "Failed to send OTP"));
     } finally {
       setLoadingOtp(false);
     }
@@ -59,8 +60,8 @@ export default function ForgotPasswordPage() {
       });
       setStatus(res.message || "OTP verified.");
       setOtpVerified(true);
-    } catch (err: any) {
-      setError(err?.response?.data?.message || "Failed to verify OTP");
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, "Failed to verify OTP"));
     } finally {
       setLoadingVerify(false);
     }
@@ -85,8 +86,8 @@ export default function ForgotPasswordPage() {
       setNewPassword("");
       setOtpSent(false);
       setOtpVerified(false);
-    } catch (err: any) {
-      setError(err?.response?.data?.message || "Failed to reset password");
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, "Failed to reset password"));
     } finally {
       setLoadingReset(false);
     }

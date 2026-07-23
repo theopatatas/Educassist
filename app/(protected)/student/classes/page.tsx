@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { api } from "@/src/lib/http/client";
 import { Users, Clock, MapPin, X, Calendar, Building2 } from "lucide-react";
 
