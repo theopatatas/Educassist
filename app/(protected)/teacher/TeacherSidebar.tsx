@@ -17,7 +17,7 @@ const menuItems = [
   { href: "/teacher/dashboard", label: "Dashboard", icon: LayoutDashboard, color: "text-blue-500" },
   { href: "/teacher/classes", label: "Classes", icon: BookOpen, color: "text-green-500" },
   { href: "/teacher/quiz-center", label: "Quiz Center", icon: BrainCircuit, color: "text-orange-500" },
-  { href: "/teacher/exam-hall", label: "Exam Hall", icon: FileText, color: "text-red-500" },
+  { href: "/teacher/exam-hall", label: "Exam Schedule", icon: FileText, color: "text-red-500" },
   { href: "/teacher/assignment", label: "Assignment", icon: ScrollText, color: "text-pink-500" },
   { href: "/teacher/grade-portal", label: "Grade Portal", icon: GraduationCap, color: "text-amber-500" },
   { href: "/teacher/attendance", label: "Attendance", icon: ClipboardCheck, color: "text-teal-500" },

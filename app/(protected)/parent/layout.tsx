@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/src/features/auth/hooks";
 import ParentHeader from "./ParentHeader";
 
-export default function ParentLayout({ children }: { children: React.ReactNode }) {
+export default function ParentLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const router = useRouter();
   const { user, hydrated } = useAuth();
 

@@ -52,6 +52,17 @@ QuestionBank.init({
         type: sequelize_1.DataTypes.TEXT,
         allowNull: true,
     },
+    questionType: {
+        type: sequelize_1.DataTypes.STRING(40),
+        allowNull: false,
+        defaultValue: "multiple_choice",
+        field: "question_type",
+    },
+    points: {
+        type: sequelize_1.DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 1,
+    },
 }, {
     sequelize: db_1.sequelize,
     tableName: "question_bank",

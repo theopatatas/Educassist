@@ -9,6 +9,7 @@ const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const compression_1 = __importDefault(require("compression"));
 const morgan_1 = __importDefault(require("morgan"));
+const path_1 = __importDefault(require("path"));
 const auth_routes_1 = __importDefault(require("./modules/auth/auth.routes"));
 const admin_routes_1 = __importDefault(require("./modules/admin/admin.routes"));
 const users_routes_1 = __importDefault(require("./modules/users/users.routes"));
@@ -20,6 +21,8 @@ const quizzes_routes_1 = __importDefault(require("./modules/quizzes/quizzes.rout
 const exams_routes_1 = __importDefault(require("./modules/exams/exams.routes"));
 const ai_routes_1 = __importDefault(require("./modules/ai/ai.routes"));
 const assignments_routes_1 = __importDefault(require("./modules/assignments/assignments.routes"));
+const events_routes_1 = __importDefault(require("./modules/events/events.routes"));
+const admin_reports_routes_1 = __importDefault(require("./modules/admin-reports/admin-reports.routes"));
 const protected_routes_1 = __importDefault(require("./routes/protected.routes"));
 const errorHandler_1 = __importDefault(require("./middleware/errorHandler"));
 function createApp() {
@@ -43,6 +46,7 @@ function createApp() {
     app.use((0, compression_1.default)());
     app.use((0, morgan_1.default)("dev"));
     app.use(express_1.default.json());
+    app.use("/uploads", express_1.default.static(path_1.default.resolve(process.cwd(), "uploads")));
     app.get("/health", (_req, res) => res.json({ ok: true }));
     app.get("/", (_req, res) => res.send("EducAssist API running"));
     app.use("/api/auth", auth_routes_1.default);
@@ -55,6 +59,8 @@ function createApp() {
     app.use("/api/quizzes", quizzes_routes_1.default);
     app.use("/api/exams", exams_routes_1.default);
     app.use("/api/assignments", assignments_routes_1.default);
+    app.use("/api/events", events_routes_1.default);
+    app.use("/api/admin-reports", admin_reports_routes_1.default);
     app.use("/api/ai", ai_routes_1.default);
     app.use("/api", protected_routes_1.default); // ✅ now GET /api/protected works
     app.use(errorHandler_1.default);

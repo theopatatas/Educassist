@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listMyClasses = listMyClasses;
+exports.getMyClassFormOptions = getMyClassFormOptions;
 exports.createMyClass = createMyClass;
 exports.updateMyClass = updateMyClass;
 exports.deleteMyClass = deleteMyClass;
@@ -23,6 +24,16 @@ async function listMyClasses(req, res) {
         });
     }
     return res.json({ ok: true, classes });
+}
+async function getMyClassFormOptions(req, res) {
+    const userId = req.user?.sub;
+    if (!userId)
+        return res.status(401).json({ ok: false, message: "Unauthorized" });
+    const options = await (0, classes_service_1.getClassFormOptionsForTeacher)(userId);
+    if (!options) {
+        return res.status(404).json({ ok: false, message: "Teacher profile not found" });
+    }
+    return res.json({ ok: true, ...options });
 }
 async function createMyClass(req, res) {
     const userId = req.user?.sub;
@@ -48,9 +59,16 @@ async function deleteMyClass(req, res) {
     const userId = req.user?.sub;
     if (!userId)
         return res.status(401).json({ ok: false, message: "Unauthorized" });
-    const result = await (0, classes_service_1.deleteClassForTeacher)(userId, req.params.id);
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+    if (!password.trim()) {
+        return res.status(400).json({ ok: false, message: "Password is required" });
+    }
+    const result = await (0, classes_service_1.deleteClassForTeacher)(userId, req.params.id, password);
     if (result === null)
         return res.status(404).json({ ok: false, message: "Teacher profile not found" });
+    if (result === "invalid_password") {
+        return res.status(400).json({ ok: false, message: "Wrong password. Please try again." });
+    }
     if (result === false)
         return res.status(404).json({ ok: false, message: "Class not found" });
     return res.json({ ok: true });
@@ -115,7 +133,7 @@ async function getMyGrades(req, res) {
     });
     if (rows === null)
         return res.status(404).json({ ok: false, message: "Teacher profile not found" });
-    return res.json({ ok: true, rows });
+    return res.json({ ok: true, rows: rows.rows, published: rows.published });
 }
 async function publishMyGrades(req, res) {
     const userId = req.user?.sub;

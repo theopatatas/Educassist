@@ -7,6 +7,7 @@ const assignments_controller_1 = require("./assignments.controller");
 const router = (0, express_1.Router)();
 router.get("/me", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("teacher", "student"), assignments_controller_1.listMyAssignments);
 router.post("/me", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("teacher"), assignments_controller_1.createMyAssignment);
+router.patch("/:id", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("teacher"), assignments_controller_1.updateMyAssignment);
 router.get("/:id/results", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("teacher"), assignments_controller_1.listMyAssignmentResults);
 router.post("/:id/submit", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("student"), assignments_controller_1.submitMyAssignment);
 exports.default = router;

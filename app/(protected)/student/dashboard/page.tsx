@@ -8,7 +8,6 @@ import {
   Users,
   Clock,
   BookOpen,
-  Star,
   X,
   Send,
   ChevronLeft,
@@ -25,6 +24,12 @@ type SubjectProgress = {
   avg: number;
 };
 
+type ChatMessage = { role: "assistant" | "user"; text: string };
+const INITIAL_STUDY_BUDDY_MESSAGES: ChatMessage[] = [
+  { role: "assistant", text: "Hi! I'm your Study Buddy. Ask me about homework, quizzes, or study tips." },
+];
+const STUDY_BUDDY_CHAT_STORAGE_KEY = "educassist_student_study_buddy_chat_v1";
+
 type ApiClass = {
   id: number;
   subjectName?: string | null;
@@ -33,14 +38,19 @@ type ApiClass = {
 const calendarDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 type CalendarEvent = {
-  id: number;
+  id: string;
   title: string;
   isoDate: string;
   date: number;
   time: string;
   location: string;
-  type: "exam" | "quiz" | "deadline" | "club";
+  type: "Quiz" | "Exam Schedule" | "Assignment";
   color: string;
+  sortTimestamp: number;
+};
+type SelectedDateEvents = {
+  dateLabel: string;
+  items: CalendarEvent[];
 };
 type ApiExam = {
   id: number;
@@ -50,6 +60,27 @@ type ApiExam = {
   duration: string;
   room?: string | null;
   subjectName?: string | null;
+  sectionName?: string | null;
+  gradeLevel?: string | null;
+};
+
+type ApiQuiz = {
+  id: number;
+  title: string;
+  dueDate?: string | null;
+  subjectName?: string | null;
+  sectionName?: string | null;
+  gradeLevel?: string | null;
+};
+
+type ApiAssignment = {
+  id: number;
+  title: string;
+  dueDate: string;
+  status: "Active" | "Closed";
+  subjectName?: string | null;
+  sectionName?: string | null;
+  gradeLevel?: string | null;
 };
 
 function getSchoolYearLabel(date = new Date()) {
@@ -66,6 +97,33 @@ function getQuarterLabel(date = new Date()) {
   if (m === 10 || m === 11 || m === 0) return "Quarter 2";
   if (m >= 1 && m <= 3) return "Quarter 3";
   return "Quarter 4";
+}
+
+function formatGradeSection(gradeLevel?: string | null, sectionName?: string | null) {
+  return [gradeLevel, sectionName].filter(Boolean).join(" • ") || "Class details";
+}
+
+function formatDateLabel(isoDate: string) {
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return isoDate;
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function getEndOfDayTimestamp(isoDate: string) {
+  const date = new Date(`${isoDate}T23:59:59`);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function getStartDateTimeTimestamp(isoDate: string, time?: string | null) {
+  if (time?.trim()) {
+    const date = new Date(`${isoDate}T${time.trim()}:00`);
+    if (!Number.isNaN(date.getTime())) return date.getTime();
+  }
+  return getEndOfDayTimestamp(isoDate);
 }
 
 function ChatGPTMark({ className = "w-5 h-5" }: { className?: string }) {
@@ -86,14 +144,39 @@ export default function StudentDashboard() {
   const syLabel = getSchoolYearLabel();
   const quarterLabel = getQuarterLabel();
   const [showAiChat, setShowAiChat] = useState(false);
-  const [messages, setMessages] = useState([
-    { role: "assistant", text: "Hi! I'm your AI companion. Ask me about homework, quizzes, or study tips." },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_STUDY_BUDDY_MESSAGES);
   const [input, setInput] = useState("");
+  const [aiSending, setAiSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(STUDY_BUDDY_CHAT_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      const safe = parsed.filter(
+        (m): m is ChatMessage =>
+          m &&
+          (m.role === "assistant" || m.role === "user") &&
+          typeof m.text === "string"
+      );
+      if (safe.length) setMessages(safe);
+    } catch {
+      // Ignore broken local storage data and keep default chat.
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STUDY_BUDDY_CHAT_STORAGE_KEY, JSON.stringify(messages));
+    } catch {
+      // Ignore storage write errors.
+    }
+  }, [messages]);
+
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [selectedDateEvents, setSelectedDateEvents] = useState<SelectedDateEvents | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
 
   const getDaysInMonth = (date: Date) =>
@@ -110,6 +193,8 @@ export default function StudentDashboard() {
     () => Array.from({ length: daysInMonth }, (_, i) => i + 1),
     [daysInMonth]
   );
+  const totalWeeks = useMemo(() => Math.ceil((firstDay + daysInMonth) / 7), [firstDay, daysInMonth]);
+  const panelHeight = useMemo(() => 160 + totalWeeks * 64, [totalWeeks]);
 
   const monthLabel = useMemo(
     () =>
@@ -119,6 +204,21 @@ export default function StudentDashboard() {
       }),
     [currentDate]
   );
+  const monthlyDeadlineCount = useMemo(
+    () =>
+      events.filter((e) => {
+        const d = new Date(e.isoDate);
+        return d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear();
+      }).length,
+    [events, currentDate]
+  );
+  const upcomingDeadlines = useMemo(() => {
+    const now = Date.now();
+    return events
+      .filter((event) => event.sortTimestamp >= now)
+      .sort((a, b) => a.sortTimestamp - b.sortTimestamp)
+      .slice(0, 6);
+  }, [events]);
 
   const changeMonth = (delta: number) => {
     setCurrentDate((prev) => {
@@ -137,7 +237,18 @@ export default function StudentDashboard() {
     );
   };
 
-  const totalUnits = subjects.reduce((sum, subject) => sum + subject.units, 0);
+  const openDateEvents = (day: number, dayEvents: CalendarEvent[]) => {
+    if (!dayEvents.length) return;
+    const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+    setSelectedDateEvents({
+      dateLabel: date.toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      }),
+      items: [...dayEvents].sort((a, b) => a.sortTimestamp - b.sortTimestamp),
+    });
+  };
 
   const classAverage = subjects.length ? `${Math.round(subjects.reduce((sum, subject) => sum + subject.avg, 0) / subjects.length)}%` : "0%";
 
@@ -148,28 +259,26 @@ export default function StudentDashboard() {
     { label: "Pending Tasks", value: "0", icon: Clock, color: "text-orange-600", bg: "bg-orange-100" },
   ];
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() || aiSending) return;
 
     const userText = input.trim();
     setInput("");
     setMessages((prev) => [...prev, { role: "user", text: userText }]);
-
-    setTimeout(() => {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          text:
-            userText.toLowerCase().includes("math")
-              ? "For Math: try 10 practice items on quadratics, then review mistakes. Want a quick 5-item drill?"
-              : userText.toLowerCase().includes("science")
-              ? "For Science: make a 5-bullet summary of each key process, then do self-quiz. Want a reviewer outline?"
-              : "Tell me the subject and what you are stuck on, and I will help you step-by-step.",
-        },
-      ]);
-    }, 700);
+    setAiSending(true);
+    try {
+      const { data } = await api.post("/api/ai/chat", { prompt: userText });
+      const text = String(data?.text ?? "").trim() || "I could not generate a response right now.";
+      setMessages((prev) => [...prev, { role: "assistant", text }]);
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        "AI is unavailable right now. Please try again in a moment.";
+      setMessages((prev) => [...prev, { role: "assistant", text: message }]);
+    } finally {
+      setAiSending(false);
+    }
   };
 
   useEffect(() => {
@@ -197,35 +306,64 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     let active = true;
-    api
-      .get("/api/exams/me")
-      .then(({ data }) => {
+    Promise.all([api.get("/api/exams/me"), api.get("/api/quizzes/me"), api.get("/api/assignments/me")])
+      .then(([examsRes, quizzesRes, assignmentsRes]) => {
         if (!active) return;
-        const rows = Array.isArray(data?.exams) ? (data.exams as ApiExam[]) : [];
-        const mapped: CalendarEvent[] = rows.map((exam) => {
+        const exams = Array.isArray(examsRes.data?.exams) ? (examsRes.data.exams as ApiExam[]) : [];
+        const quizzes = Array.isArray(quizzesRes.data?.quizzes) ? (quizzesRes.data.quizzes as ApiQuiz[]) : [];
+        const assignments = Array.isArray(assignmentsRes.data?.assignments)
+          ? (assignmentsRes.data.assignments as ApiAssignment[])
+          : [];
+
+        const examEvents: CalendarEvent[] = exams.map((exam) => {
           const d = new Date(exam.examDate);
-          const subject = (exam.subjectName || "").toLowerCase();
-          const color = subject.includes("science")
-            ? "bg-green-100 text-green-700 border-green-200"
-            : subject.includes("math")
-            ? "bg-blue-100 text-blue-700 border-blue-200"
-            : subject.includes("english")
-            ? "bg-purple-100 text-purple-700 border-purple-200"
-            : subject.includes("filipino")
-            ? "bg-orange-100 text-orange-700 border-orange-200"
-            : "bg-red-100 text-red-700 border-red-200";
           return {
-            id: Number(exam.id),
+            id: `exam-${exam.id}`,
             title: exam.title,
             isoDate: exam.examDate,
             date: d.getDate(),
             time: exam.startTime || exam.duration || "Exam",
-            location: exam.room || "TBA",
-            type: "exam",
-            color,
+            location: exam.room || formatGradeSection(exam.gradeLevel, exam.sectionName),
+            type: "Exam Schedule",
+            color: "bg-red-100 text-red-700 border-red-200",
+            sortTimestamp: getStartDateTimeTimestamp(exam.examDate, exam.startTime),
           };
         });
-        setEvents(mapped);
+        const quizEvents: CalendarEvent[] = quizzes
+          .filter((quiz) => Boolean(quiz.dueDate))
+          .map((quiz) => {
+            const isoDate = String(quiz.dueDate);
+            const d = new Date(isoDate);
+            return {
+              id: `quiz-${quiz.id}`,
+              title: quiz.title,
+              isoDate,
+              date: d.getDate(),
+              time: "Due date",
+              location: formatGradeSection(quiz.gradeLevel, quiz.sectionName),
+              type: "Quiz",
+              color: "bg-blue-100 text-blue-700 border-blue-200",
+              sortTimestamp: getEndOfDayTimestamp(isoDate),
+            };
+          });
+        const assignmentEvents: CalendarEvent[] = assignments
+          .filter((assignment) => Boolean(assignment.dueDate))
+          .map((assignment) => {
+            const d = new Date(assignment.dueDate);
+            return {
+              id: `assignment-${assignment.id}`,
+              title: assignment.title,
+              isoDate: assignment.dueDate,
+              date: d.getDate(),
+              time: "Due date",
+              location: formatGradeSection(assignment.gradeLevel, assignment.sectionName),
+              type: "Assignment",
+              color: "bg-amber-100 text-amber-700 border-amber-200",
+              sortTimestamp: getEndOfDayTimestamp(assignment.dueDate),
+            };
+          });
+
+        setEvents([...examEvents, ...quizEvents, ...assignmentEvents]);
       })
       .catch(() => {
         if (active) setEvents([]);
@@ -280,8 +418,8 @@ export default function StudentDashboard() {
       <button
         type="button"
         onClick={() => setShowAiChat(true)}
-        title="AI Companion"
-        aria-label="Open AI Companion"
+        title="Study Buddy"
+        aria-label="Open Study Buddy"
         className="fixed bottom-4 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-black shadow-lg transition hover:bg-gray-900"
       >
         <span className="text-white">
@@ -333,84 +471,16 @@ export default function StudentDashboard() {
                 );
               })}
             </div>
-
-            <div>
-              <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-gray-800">
-                <Star className="h-5 w-5 fill-yellow-500 text-yellow-500" />
-                My Progress
-              </h2>
-
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-                {subjects.map((subject) => (
-                  <div key={subject.name} className="overflow-hidden rounded-2xl bg-white shadow-md transition hover:-translate-y-1">
-                    <div className={`h-2 ${subject.color}`} />
-                    <div className="p-6 text-center">
-                      <div className="mb-4 flex flex-col items-center gap-2">
-                        <h3 className="font-bold text-gray-800">{subject.name}</h3>
-                        <span className={`rounded-lg px-2 py-1 text-xs font-bold ${subject.bg} ${subject.text}`}>
-                          {subject.avg}% Avg
-                        </span>
-                      </div>
-
-                      <div className="flex justify-center">
-                        <div className="relative h-24 w-24">
-                          <svg className="h-full w-full -rotate-90">
-                            <circle
-                              cx="48"
-                              cy="48"
-                              r="40"
-                              strokeWidth="8"
-                              fill="transparent"
-                              className="text-gray-100"
-                              stroke="currentColor"
-                            />
-                            <circle
-                              cx="48"
-                              cy="48"
-                              r="40"
-                              strokeWidth="8"
-                              fill="transparent"
-                              strokeDasharray={251.2}
-                              strokeDashoffset={251.2 * (1 - subject.avg / 100)}
-                              className={subject.text}
-                              strokeLinecap="round"
-                            />
-                          </svg>
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <span className="text-xl font-bold">{subject.avg}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 flex items-center justify-center gap-4 text-sm text-gray-500">
-                        <span>{subject.units} Units</span>
-                        <span className="flex items-center gap-1 text-green-500">
-                          <TrendingUp className="h-3 w-3" /> +2.4%
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {subjects.length === 0 ? (
-                <div className="rounded-2xl bg-white p-6 text-center text-sm text-gray-500 shadow-md">
-                  No subject progress data yet.
-                </div>
-              ) : null}
-
-              <p className="mt-4 text-sm text-gray-500">
-                Total enrolled units: <span className="font-semibold text-gray-700">{totalUnits}</span>
-              </p>
-            </div>
           </div>
 
-          <div>
-            <div className="overflow-hidden rounded-2xl bg-white shadow-md">
-              <div className="bg-gray-50 p-4 shadow-[0_1px_0_0_rgba(15,23,42,0.06)]">
+          <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+            <div className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-md" style={{ height: `${panelHeight}px` }}>
+              <div className="shrink-0 bg-gray-50 p-4 shadow-[0_1px_0_0_rgba(15,23,42,0.06)]">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <h2 className="text-base font-bold text-gray-800">My Calendar</h2>
-                    <p className="text-xs text-gray-500">Classes, quizzes, deadlines, and activities</p>
+                    <p className="text-xs text-gray-500">Quizzes, exam schedule, and assignment</p>
+                    <p className="mt-1 text-xs font-semibold text-red-600">Deadlines this month: {monthlyDeadlineCount}</p>
                   </div>
 
                   <div className="flex items-center rounded-xl bg-white p-1 shadow-sm">
@@ -439,7 +509,7 @@ export default function StudentDashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-7 shadow-[0_1px_0_0_rgba(15,23,42,0.06)]">
+              <div className="shrink-0 grid grid-cols-7 shadow-[0_1px_0_0_rgba(15,23,42,0.06)]">
                 {calendarDays.map((day) => (
                   <div
                     key={day}
@@ -450,7 +520,10 @@ export default function StudentDashboard() {
                 ))}
               </div>
 
-              <div className="grid auto-rows-fr grid-cols-7">
+              <div
+                className="grid flex-1 grid-cols-7"
+                style={{ gridTemplateRows: `repeat(${totalWeeks}, minmax(64px, 1fr))` }}
+              >
                 {blanks.map((_, i) => (
                   <div key={`blank-${i}`} className="bg-gray-50/30" />
                 ))}
@@ -467,7 +540,7 @@ export default function StudentDashboard() {
                 return (
                     <div
                       key={day}
-                      className="relative min-h-[90px] p-2 transition-colors hover:bg-gray-50"
+                      className="relative overflow-hidden p-2 transition-colors hover:bg-gray-50"
                     >
                       <span
                         className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium ${
@@ -477,19 +550,17 @@ export default function StudentDashboard() {
                         {day}
                       </span>
 
-                      <div className="mt-2 space-y-1">
-                        {dayEvents.map((event) => (
-                          <button
-                            key={event.id}
-                            onClick={() => setSelectedEvent(event)}
-                            className={`w-full truncate rounded-md border px-2 py-1 text-left text-[11px] font-medium ${event.color}`}
-                            title={event.title}
-                            type="button"
-                          >
-                            {event.title}
-                          </button>
-                        ))}
-                      </div>
+                      {dayEvents.length ? (
+                        <button
+                          type="button"
+                          onClick={() => openDateEvents(day, dayEvents)}
+                          className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full px-1.5 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50"
+                          aria-label={`View ${dayEvents.length} event${dayEvents.length === 1 ? "" : "s"} for ${day}`}
+                        >
+                          <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+                          {dayEvents.length > 1 ? <span>{dayEvents.length}</span> : null}
+                        </button>
+                      ) : null}
                     </div>
                   );
                 })}
@@ -498,15 +569,56 @@ export default function StudentDashboard() {
                 <div className="p-4 text-center text-sm text-gray-500">No calendar events yet.</div>
               ) : null}
             </div>
+            <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl bg-white shadow-md" style={{ height: `${panelHeight}px` }}>
+              <div className="shrink-0 bg-gray-50 p-4 shadow-[0_1px_0_0_rgba(15,23,42,0.06)]">
+                <h2 className="text-base font-bold text-gray-800">Upcoming Deadlines</h2>
+                <p className="text-xs text-gray-500">Your next quizzes, exam schedules, and assignments.</p>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 scroll-smooth">
+                {upcomingDeadlines.length ? (
+                  <div className="space-y-3">
+                    {upcomingDeadlines.map((event) => (
+                      <button
+                        key={event.id}
+                        type="button"
+                        onClick={() =>
+                          setSelectedDateEvents({
+                            dateLabel: formatDateLabel(event.isoDate),
+                            items: [event],
+                          })
+                        }
+                        className="flex w-full items-start justify-between gap-3 rounded-2xl border border-gray-100 p-4 text-left transition hover:border-indigo-200 hover:bg-indigo-50/40"
+                      >
+                        <div className="min-w-0">
+                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${event.color}`}>
+                            {event.type}
+                          </span>
+                          <p className="mt-2 truncate text-sm font-semibold text-gray-900">{event.title}</p>
+                          <p className="mt-1 text-xs text-gray-500">{event.location}</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-sm font-semibold text-gray-900">{formatDateLabel(event.isoDate)}</p>
+                          <p className="mt-1 text-xs text-gray-500">{event.time}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-500">
+                    No upcoming deadlines yet.
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {selectedEvent ? (
+      {selectedDateEvents ? (
         <>
           <div
             className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
-            onClick={() => setSelectedEvent(null)}
+            onClick={() => setSelectedDateEvents(null)}
           />
 
           <div
@@ -515,15 +627,15 @@ export default function StudentDashboard() {
           >
             <div className="flex items-start justify-between gap-3 bg-gray-50 p-5 shadow-[0_1px_0_0_rgba(15,23,42,0.06)]">
               <div>
-                <span className={`inline-block rounded-lg border px-2 py-1 text-xs font-bold ${selectedEvent.color}`}>
-                  {selectedEvent.type.toUpperCase()}
-                </span>
-                <h3 className="mt-2 text-xl font-bold text-gray-900">{selectedEvent.title}</h3>
+                <h3 className="text-xl font-bold text-gray-900">{selectedDateEvents.dateLabel}</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  {selectedDateEvents.items.length} event{selectedDateEvents.items.length === 1 ? "" : "s"} scheduled
+                </p>
               </div>
 
               <button
                 type="button"
-                onClick={() => setSelectedEvent(null)}
+                onClick={() => setSelectedDateEvents(null)}
                 className="rounded-full p-2 text-gray-500 transition-colors hover:bg-gray-100"
                 aria-label="Close event"
               >
@@ -531,24 +643,33 @@ export default function StudentDashboard() {
               </button>
             </div>
 
-            <div className="space-y-4 p-5">
-              <div className="flex items-center gap-2 text-gray-700">
-                <Clock className="h-4 w-4 text-gray-500" />
-                <span className="font-medium">{selectedEvent.time}</span>
-              </div>
-
-              <div className="flex items-center gap-2 text-gray-700">
-                <MapPin className="h-4 w-4 text-gray-500" />
-                <span className="font-medium">{selectedEvent.location}</span>
-              </div>
-
-              <div className="text-sm text-gray-500">Tip: Add a reminder on your phone so you do not miss it.</div>
+            <div className="space-y-3 p-5">
+              {selectedDateEvents.items.map((event) => (
+                <div key={event.id} className="rounded-2xl border border-gray-100 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${event.color}`}>
+                        {event.type}
+                      </span>
+                      <p className="mt-2 text-sm font-semibold text-gray-900">{event.title}</p>
+                    </div>
+                    <div className="text-right text-xs text-gray-500">
+                      <p>{formatDateLabel(event.isoDate)}</p>
+                      <p className="mt-1">{event.time}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center gap-2 text-sm text-gray-600">
+                    <MapPin className="h-4 w-4 text-gray-500" />
+                    <span>{event.location}</span>
+                  </div>
+                </div>
+              ))}
             </div>
 
             <div className="flex justify-end bg-gray-50 p-5 shadow-[0_-1px_0_0_rgba(15,23,42,0.06)]">
               <button
                 type="button"
-                onClick={() => setSelectedEvent(null)}
+                onClick={() => setSelectedDateEvents(null)}
                 className="rounded-xl px-4 py-2 text-sm shadow-sm hover:bg-gray-100"
               >
                 Close
@@ -573,7 +694,7 @@ export default function StudentDashboard() {
                   <ChatGPTMark className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold">AI Companion</h3>
+                  <h3 className="font-bold">Study Buddy</h3>
                   <p className="text-xs text-white/70">Study help - tips - reviewers</p>
                 </div>
               </div>
@@ -613,7 +734,8 @@ export default function StudentDashboard() {
               />
               <button
                 type="submit"
-                className="rounded-xl bg-indigo-600 p-2 text-white transition-colors hover:bg-indigo-700"
+                disabled={aiSending}
+                className="rounded-xl bg-indigo-600 p-2 text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Send"
               >
                 <Send className="h-5 w-5" />

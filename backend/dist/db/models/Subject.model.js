@@ -20,6 +20,12 @@ Subject.init({
         type: sequelize_1.DataTypes.STRING(40),
         allowNull: true,
     },
+    createdByAdmin: {
+        type: sequelize_1.DataTypes.TINYINT,
+        allowNull: false,
+        defaultValue: 0,
+        field: "created_by_admin",
+    },
 }, {
     sequelize: db_1.sequelize,
     tableName: "subjects",

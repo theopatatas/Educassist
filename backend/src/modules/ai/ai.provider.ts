@@ -40,8 +40,15 @@ function createRulesProvider(): AIProvider {
 }
 
 function createOpenAIProvider(): AIProvider {
-  const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
-  const model = env.OPENAI_MODEL ?? "gpt-4o-mini";
+  const client = new OpenAI({
+    apiKey: env.OPENAI_API_KEY,
+    ...(env.OPENAI_BASE_URL ? { baseURL: env.OPENAI_BASE_URL } : {}),
+  });
+  const rawModel = env.OPENAI_MODEL ?? "gpt-4o-mini";
+  const model =
+    env.OPENAI_BASE_URL?.includes("openrouter.ai") && !rawModel.includes("/")
+      ? `openai/${rawModel}`
+      : rawModel;
 
   return {
     name: "openai",

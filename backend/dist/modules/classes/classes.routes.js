@@ -6,6 +6,7 @@ const role_middleware_1 = require("../../middleware/role.middleware");
 const classes_controller_1 = require("./classes.controller");
 const router = (0, express_1.Router)();
 router.get("/me", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("teacher", "student"), classes_controller_1.listMyClasses);
+router.get("/meta/me", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("teacher"), classes_controller_1.getMyClassFormOptions);
 router.get("/grades/me", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("teacher", "student"), classes_controller_1.getMyGrades);
 router.post("/grades/me", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("teacher"), classes_controller_1.publishMyGrades);
 router.get("/attendance/me", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("teacher", "student"), classes_controller_1.getMyAttendance);

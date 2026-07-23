@@ -11,6 +11,9 @@ export type CreateTeacherInput = {
   password: string;
   firstName: string;
   lastName: string;
+  middleName?: string;
+  contactNumber?: string;
+  gender?: string;
   employeeNumber: string;
   gradeLevel?: string;
   sectionId?: string | number;
@@ -19,6 +22,11 @@ export type CreateTeacherInput = {
 export type UpdateTeacherInput = {
   firstName?: string;
   lastName?: string;
+  middleName?: string | null;
+  contactNumber?: string | null;
+  email?: string;
+  isActive?: boolean;
+  archived?: boolean;
   employeeNumber?: string | null;
 };
 
@@ -45,6 +53,9 @@ export async function createTeacher(input: CreateTeacherInput) {
         userId: user.id,
         firstName: input.firstName,
         lastName: input.lastName,
+        middleName: input.middleName?.trim() || null,
+        contactNumber: input.contactNumber?.trim() || null,
+        gender: input.gender?.trim() || null,
         employeeNumber: input.employeeNumber,
         gradeLevel: input.gradeLevel ?? null,
         sectionId: input.sectionId ? Number(input.sectionId) : null,
@@ -67,10 +78,11 @@ export async function listTeachers() {
   const userIds = teachers.map((t) => Number(t.userId)).filter(Boolean);
   const sectionIds = teachers.map((t) => Number(t.sectionId)).filter(Boolean);
   const [users, sections] = await Promise.all([
-    userIds.length ? User.findAll({ where: { id: userIds }, attributes: ["id", "email"] }) : Promise.resolve([]),
+    userIds.length ? User.findAll({ where: { id: userIds }, attributes: ["id", "email", "isActive"] }) : Promise.resolve([]),
     sectionIds.length ? Section.findAll({ where: { id: sectionIds }, attributes: ["id", "name"] }) : Promise.resolve([]),
   ]);
   const userEmailById = new Map(users.map((u) => [Number(u.id), u.email]));
+  const userActiveById = new Map(users.map((u) => [Number(u.id), Boolean(u.isActive)]));
   const sectionNameById = new Map(sections.map((s) => [Number(s.id), s.name]));
 
   return teachers.map((teacher) => {
@@ -78,6 +90,7 @@ export async function listTeachers() {
     return {
       ...raw,
       email: userEmailById.get(Number(teacher.userId)) ?? null,
+      isActive: userActiveById.get(Number(teacher.userId)) ?? false,
       sectionName: teacher.sectionId ? sectionNameById.get(Number(teacher.sectionId)) ?? null : null,
     };
   });
@@ -92,14 +105,26 @@ export async function getTeacherByUserId(userId: string) {
 }
 
 export async function updateTeacher(id: string, data: UpdateTeacherInput) {
-  const teacher = await Teacher.findByPk(id);
-  if (!teacher) return null;
-  await teacher.update({
-    firstName: data.firstName ?? teacher.firstName,
-    lastName: data.lastName ?? teacher.lastName,
-    employeeNumber: data.employeeNumber ?? teacher.employeeNumber,
+  return sequelize.transaction(async (transaction) => {
+    const teacher = await Teacher.findByPk(id, { transaction });
+    if (!teacher) return null;
+    await teacher.update({
+      firstName: data.firstName ?? teacher.firstName,
+      lastName: data.lastName ?? teacher.lastName,
+      middleName: data.middleName === undefined ? teacher.middleName : data.middleName?.trim() || null,
+      contactNumber: data.contactNumber === undefined ? teacher.contactNumber : data.contactNumber?.trim() || null,
+      archivedAt: data.archived === undefined ? teacher.archivedAt : data.archived ? new Date() : null,
+      employeeNumber: data.employeeNumber ?? teacher.employeeNumber,
+    }, { transaction });
+    const user = await User.findByPk(teacher.userId, { transaction });
+    if (user && data.email !== undefined) {
+      await user.update({ email: data.email.trim().toLowerCase() }, { transaction });
+    }
+    if (user && data.isActive !== undefined) {
+      await user.update({ isActive: data.isActive, refreshTokenHash: data.isActive ? user.refreshTokenHash : null }, { transaction });
+    }
+    return { ...teacher.toJSON(), email: user?.email ?? null, isActive: user?.isActive ?? false };
   });
-  return teacher;
 }
 
 export async function deleteTeacher(id: string) {

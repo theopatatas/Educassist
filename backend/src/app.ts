@@ -3,6 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
 import morgan from "morgan";
+import path from "path";
 
 import authRoutes from "./modules/auth/auth.routes";
 import adminRoutes from "./modules/admin/admin.routes";
@@ -15,6 +16,8 @@ import quizzesRoutes from "./modules/quizzes/quizzes.routes";
 import examsRoutes from "./modules/exams/exams.routes";
 import aiRoutes from "./modules/ai/ai.routes";
 import assignmentsRoutes from "./modules/assignments/assignments.routes";
+import eventsRoutes from "./modules/events/events.routes";
+import adminReportsRoutes from "./modules/admin-reports/admin-reports.routes";
 import protectedRoutes from "./routes/protected.routes";
 import errorHandler from "./middleware/errorHandler";
 
@@ -35,11 +38,12 @@ export function createApp() {
         return callback(new Error(`CORS blocked for origin: ${origin}`));
       },
       credentials: true,
-    })
+    }),
   );
   app.use(compression());
   app.use(morgan("dev"));
   app.use(express.json());
+  app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 
   app.get("/health", (_req, res) => res.json({ ok: true }));
   app.get("/", (_req, res) => res.send("EducAssist API running"));
@@ -54,6 +58,8 @@ export function createApp() {
   app.use("/api/quizzes", quizzesRoutes);
   app.use("/api/exams", examsRoutes);
   app.use("/api/assignments", assignmentsRoutes);
+  app.use("/api/events", eventsRoutes);
+  app.use("/api/admin-reports", adminReportsRoutes);
   app.use("/api/ai", aiRoutes);
   app.use("/api", protectedRoutes); // ✅ now GET /api/protected works
 

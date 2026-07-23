@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { api } from "@/src/lib/http/client";
 import {
   Calendar,
+  ChevronDown,
   FileText,
   CheckCircle2,
   Clock,
@@ -58,12 +59,6 @@ const subjectTone: Record<AssignmentItem["color"], string> = {
   purple: "bg-purple-50 text-purple-600",
 };
 
-const topBarTone: Record<AssignmentItem["color"], string> = {
-  green: "bg-green-500",
-  blue: "bg-blue-500",
-  purple: "bg-purple-500",
-};
-
 function isOverdue(dueDate: string, status: Status) {
   if (status === "Submitted" || status === "Graded") return false;
   const today = new Date();
@@ -78,13 +73,13 @@ export default function StudentAssignmentPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [selectedAssignment, setSelectedAssignment] = useState<AssignmentItem | null>(null);
-  const [selectedSubject, setSelectedSubject] = useState<"All" | string>("All");
-  const [selectedStatus, setSelectedStatus] = useState<"All" | Status>("All");
+  const [selectedSubject, setSelectedSubject] = useState<"All Subjects" | string>("All Subjects");
+  const [selectedStatus, setSelectedStatus] = useState<"All Status" | Status>("All Status");
 
   const filteredAssignments = useMemo(() => {
     return assignments.filter((a) => {
-      const subjectOk = selectedSubject === "All" || a.subject === selectedSubject;
-      const statusOk = selectedStatus === "All" || a.status === selectedStatus;
+      const subjectOk = selectedSubject === "All Subjects" || a.subject === selectedSubject;
+      const statusOk = selectedStatus === "All Status" || a.status === selectedStatus;
       return subjectOk && statusOk;
     });
   }, [assignments, selectedSubject, selectedStatus]);
@@ -169,13 +164,6 @@ export default function StudentAssignmentPage() {
           <h1 className="text-2xl font-bold text-gray-800">My Assignments</h1>
           <p className="text-gray-500">View tasks, due dates, and your submissions</p>
         </div>
-
-        <div className="flex flex-wrap gap-2">
-          <span className="rounded-full border bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700">To Do: {stats.todo}</span>
-          <span className="rounded-full border bg-red-50 px-3 py-1 text-sm font-medium text-red-700">Missing: {stats.missing}</span>
-          <span className="rounded-full border bg-indigo-50 px-3 py-1 text-sm font-medium text-indigo-700">Submitted: {stats.submitted}</span>
-          <span className="rounded-full border bg-green-50 px-3 py-1 text-sm font-medium text-green-700">Graded: {stats.graded}</span>
-        </div>
       </div>
 
       {loadError ? (
@@ -216,30 +204,35 @@ export default function StudentAssignmentPage() {
       </div>
 
       <div className="mb-6 flex flex-col gap-3 sm:flex-row">
-        <select
-          value={selectedSubject}
-          onChange={(e) => setSelectedSubject(e.target.value)}
-          className="rounded-xl border border-gray-200 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-indigo-500"
-        >
-          <option value="All">All Subjects</option>
-          {[...new Set(assignments.map((a) => a.subject))].map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        <div className="relative w-full sm:w-[220px]">
+          <select
+            value={selectedSubject}
+            onChange={(e) => setSelectedSubject(e.target.value)}
+            className="h-11 w-full appearance-none rounded-2xl border border-gray-200 bg-white px-4 pr-11 text-sm font-medium text-gray-700 outline-none transition focus:border-gray-300 focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="All Subjects">All Subjects</option>
+            {[...new Set(assignments.map((a) => a.subject))].map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        </div>
 
-        <select
-          value={selectedStatus}
-          onChange={(e) => setSelectedStatus(e.target.value as Status | "All")}
-          className="rounded-xl border border-gray-200 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-indigo-500"
-        >
-          <option value="All">All Status</option>
-          <option value="To Do">To Do</option>
-          <option value="Submitted">Submitted</option>
-          <option value="Graded">Graded</option>
-          <option value="Missing">Missing</option>
-        </select>
+        <div className="relative w-full sm:w-[220px]">
+          <select
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value as Status | "All Status")}
+            className="h-11 w-full appearance-none rounded-2xl border border-gray-200 bg-white px-4 pr-11 text-sm font-medium text-gray-700 outline-none transition focus:border-gray-300 focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="All Status">All Status</option>
+            <option value="To Do">To Do</option>
+            <option value="Submitted">Submitted</option>
+            <option value="Missing">Missing</option>
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -251,8 +244,6 @@ export default function StudentAssignmentPage() {
               onClick={() => setSelectedAssignment(assignment)}
               className="group cursor-pointer overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all hover:shadow-md"
             >
-              <div className={`h-2 w-full ${topBarTone[assignment.color]}`} />
-
               <div className="p-6">
                 <div className="mb-4 flex items-start justify-between">
                   <span className={`rounded-full px-3 py-1 text-xs font-bold ${subjectTone[assignment.color]}`}>
@@ -278,13 +269,6 @@ export default function StudentAssignmentPage() {
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500">My Status</span>
                     <span className="font-bold text-gray-700">{overdue ? "Overdue" : assignment.status}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500">Score</span>
-                    <span className="font-bold text-gray-700">
-                      {assignment.score == null ? "-" : `${assignment.score}/${assignment.maxScore}`}
-                    </span>
                   </div>
                 </div>
               </div>

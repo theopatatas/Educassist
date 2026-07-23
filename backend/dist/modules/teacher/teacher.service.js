@@ -36,6 +36,9 @@ async function createTeacher(input) {
             userId: user.id,
             firstName: input.firstName,
             lastName: input.lastName,
+            middleName: input.middleName?.trim() || null,
+            contactNumber: input.contactNumber?.trim() || null,
+            gender: input.gender?.trim() || null,
             employeeNumber: input.employeeNumber,
             gradeLevel: input.gradeLevel ?? null,
             sectionId: input.sectionId ? Number(input.sectionId) : null,
@@ -48,7 +51,27 @@ async function createTeacher(input) {
     });
 }
 async function listTeachers() {
-    return Teacher_model_1.Teacher.findAll({ order: [["createdAt", "DESC"]] });
+    const teachers = await Teacher_model_1.Teacher.findAll({ order: [["createdAt", "DESC"]] });
+    if (teachers.length === 0)
+        return [];
+    const userIds = teachers.map((t) => Number(t.userId)).filter(Boolean);
+    const sectionIds = teachers.map((t) => Number(t.sectionId)).filter(Boolean);
+    const [users, sections] = await Promise.all([
+        userIds.length ? User_model_1.User.findAll({ where: { id: userIds }, attributes: ["id", "email", "isActive"] }) : Promise.resolve([]),
+        sectionIds.length ? Section_model_1.Section.findAll({ where: { id: sectionIds }, attributes: ["id", "name"] }) : Promise.resolve([]),
+    ]);
+    const userEmailById = new Map(users.map((u) => [Number(u.id), u.email]));
+    const userActiveById = new Map(users.map((u) => [Number(u.id), Boolean(u.isActive)]));
+    const sectionNameById = new Map(sections.map((s) => [Number(s.id), s.name]));
+    return teachers.map((teacher) => {
+        const raw = teacher.toJSON();
+        return {
+            ...raw,
+            email: userEmailById.get(Number(teacher.userId)) ?? null,
+            isActive: userActiveById.get(Number(teacher.userId)) ?? false,
+            sectionName: teacher.sectionId ? sectionNameById.get(Number(teacher.sectionId)) ?? null : null,
+        };
+    });
 }
 async function getTeacherById(id) {
     return Teacher_model_1.Teacher.findByPk(id);
@@ -57,15 +80,27 @@ async function getTeacherByUserId(userId) {
     return Teacher_model_1.Teacher.findOne({ where: { userId } });
 }
 async function updateTeacher(id, data) {
-    const teacher = await Teacher_model_1.Teacher.findByPk(id);
-    if (!teacher)
-        return null;
-    await teacher.update({
-        firstName: data.firstName ?? teacher.firstName,
-        lastName: data.lastName ?? teacher.lastName,
-        employeeNumber: data.employeeNumber ?? teacher.employeeNumber,
+    return db_1.sequelize.transaction(async (transaction) => {
+        const teacher = await Teacher_model_1.Teacher.findByPk(id, { transaction });
+        if (!teacher)
+            return null;
+        await teacher.update({
+            firstName: data.firstName ?? teacher.firstName,
+            lastName: data.lastName ?? teacher.lastName,
+            middleName: data.middleName === undefined ? teacher.middleName : data.middleName?.trim() || null,
+            contactNumber: data.contactNumber === undefined ? teacher.contactNumber : data.contactNumber?.trim() || null,
+            archivedAt: data.archived === undefined ? teacher.archivedAt : data.archived ? new Date() : null,
+            employeeNumber: data.employeeNumber ?? teacher.employeeNumber,
+        }, { transaction });
+        const user = await User_model_1.User.findByPk(teacher.userId, { transaction });
+        if (user && data.email !== undefined) {
+            await user.update({ email: data.email.trim().toLowerCase() }, { transaction });
+        }
+        if (user && data.isActive !== undefined) {
+            await user.update({ isActive: data.isActive, refreshTokenHash: data.isActive ? user.refreshTokenHash : null }, { transaction });
+        }
+        return { ...teacher.toJSON(), email: user?.email ?? null, isActive: user?.isActive ?? false };
     });
-    return teacher;
 }
 async function deleteTeacher(id) {
     const teacher = await Teacher_model_1.Teacher.findByPk(id);

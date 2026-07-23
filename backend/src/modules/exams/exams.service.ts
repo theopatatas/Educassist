@@ -62,6 +62,24 @@ function parseCoverage(input: unknown) {
   return [];
 }
 
+function isPastExamSchedule(date?: string, startTime?: string | null) {
+  if (!date) return false;
+
+  const day = new Date(date);
+  if (Number.isNaN(day.getTime())) return true;
+
+  if (startTime?.trim()) {
+    const scheduled = new Date(`${date}T${startTime.trim()}:00`);
+    if (Number.isNaN(scheduled.getTime())) return true;
+    return scheduled.getTime() < Date.now();
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  day.setHours(0, 0, 0, 0);
+  return day.getTime() < today.getTime();
+}
+
 export async function listExamsForTeacher(
   userId: string,
   filter?: { section?: string; gradeLevel?: string }
@@ -103,6 +121,7 @@ export async function listExamsForTeacher(
         ...e.toJSON(),
         subjectName,
         sectionName,
+        gradeLevel: cls?.gradeLevel ?? null,
         color: colorForSubject(subjectName),
         coverage: parseCoverage(e.coverageJson),
         students: total,
@@ -157,6 +176,8 @@ export async function listExamsForStudent(userId: string) {
       ...e.toJSON(),
       subjectName,
       sectionName,
+      gradeLevel: cls?.gradeLevel ?? null,
+      buildingName: cls?.buildingName ?? null,
       teacherName,
       color: colorForSubject(subjectName),
       coverage: parseCoverage(e.coverageJson),
@@ -168,6 +189,7 @@ export async function createExamForTeacher(userId: string, input: CreateExamInpu
   const teacher = await Teacher.findOne({ where: { userId } });
   if (!teacher) return null;
   if (!input.classId) return false;
+  if (isPastExamSchedule(input.date, input.startTime)) return "past_date";
 
   const cls = await Class.findByPk(input.classId);
   if (!cls || cls.teacherId !== teacher.id) return false;
@@ -195,6 +217,9 @@ export async function updateExamForTeacher(userId: string, examId: string, input
 
   const exam = await Exam.findByPk(examId);
   if (!exam || exam.teacherId !== teacher.id) return false;
+  const nextDate = input.date ?? exam.examDate;
+  const nextStartTime = input.startTime !== undefined ? input.startTime : exam.startTime;
+  if (isPastExamSchedule(nextDate, nextStartTime)) return "past_date";
 
   await exam.update({
     title: input.title?.trim() ? input.title.trim().slice(0, 180) : exam.title,
@@ -209,4 +234,15 @@ export async function updateExamForTeacher(userId: string, examId: string, input
   });
 
   return exam;
+}
+
+export async function deleteExamForTeacher(userId: string, examId: string) {
+  const teacher = await Teacher.findOne({ where: { userId } });
+  if (!teacher) return null;
+
+  const exam = await Exam.findByPk(examId);
+  if (!exam || exam.teacherId !== teacher.id) return false;
+
+  await exam.destroy();
+  return true;
 }

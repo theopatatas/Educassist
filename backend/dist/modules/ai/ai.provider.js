@@ -30,8 +30,14 @@ function createRulesProvider() {
     };
 }
 function createOpenAIProvider() {
-    const client = new openai_1.default({ apiKey: env_1.env.OPENAI_API_KEY });
-    const model = env_1.env.OPENAI_MODEL ?? "gpt-4o-mini";
+    const client = new openai_1.default({
+        apiKey: env_1.env.OPENAI_API_KEY,
+        ...(env_1.env.OPENAI_BASE_URL ? { baseURL: env_1.env.OPENAI_BASE_URL } : {}),
+    });
+    const rawModel = env_1.env.OPENAI_MODEL ?? "gpt-4o-mini";
+    const model = env_1.env.OPENAI_BASE_URL?.includes("openrouter.ai") && !rawModel.includes("/")
+        ? `openai/${rawModel}`
+        : rawModel;
     return {
         name: "openai",
         async generate(messages) {

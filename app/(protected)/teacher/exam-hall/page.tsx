@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/src/lib/http/client";
-import { FileText, Calendar, AlertTriangle, Plus, X, Clock, Users, ClipboardList } from "lucide-react";
+import { FileText, Calendar, AlertTriangle, Plus, X, Clock, Users, ChevronDown } from "lucide-react";
 
 type ExamStatus = "Scheduled" | "Completed" | "Drafting";
 type GradingStatus = "Not Started" | "In Progress" | "Done";
@@ -19,6 +19,7 @@ type TeacherExam = {
   room: string;
   coverage: string[];
   section: string;
+  gradeLevel: string;
   students: number;
   submissions?: { submitted: number; total: number };
   gradingStatus: GradingStatus;
@@ -38,6 +39,7 @@ type ApiExam = {
   color?: string;
   subjectName?: string | null;
   sectionName?: string | null;
+  gradeLevel?: string | null;
   coverage?: string[];
   students?: number;
   submissions?: { submitted: number; total: number };
@@ -53,6 +55,47 @@ type TeacherClass = {
 
 function normalizeValue(value?: string | null) {
   return (value || "").trim();
+}
+
+function formatClassOptionLabel(cls: TeacherClass) {
+  const subject = cls.subjectName || "Subject";
+  const gradeLevel = cls.gradeLevel || "Grade";
+  const section = cls.name || "Section";
+  return `${subject} - ${gradeLevel} - ${section}`;
+}
+
+function getTodayDateInputValue() {
+  return new Date().toISOString().split("T")[0];
+}
+
+function combineExamLocation(building?: string, room?: string) {
+  const cleanBuilding = (building || "").trim();
+  const cleanRoom = (room || "").trim();
+  if (cleanBuilding && cleanRoom) return `${cleanBuilding} - ${cleanRoom}`;
+  return cleanBuilding || cleanRoom || "TBA";
+}
+
+function splitExamLocation(value?: string | null) {
+  const raw = (value || "").trim();
+  if (!raw || raw === "TBA") return { building: "", room: "" };
+  const parts = raw.split(" - ");
+  if (parts.length >= 2) {
+    return {
+      building: parts.slice(0, -1).join(" - ").trim(),
+      room: parts[parts.length - 1].trim(),
+    };
+  }
+  return { building: "", room: raw };
+}
+
+function isPastExamSchedule(date?: string, startTime?: string) {
+  if (!date) return false;
+  if (startTime?.trim()) {
+    const scheduled = new Date(`${date}T${startTime.trim()}:00`);
+    if (Number.isNaN(scheduled.getTime())) return true;
+    return scheduled.getTime() < Date.now();
+  }
+  return date < getTodayDateInputValue();
 }
 
 function statusPill(status: ExamStatus) {
@@ -80,6 +123,7 @@ function mapApiExam(exam: ApiExam): TeacherExam {
     room: exam.room || "TBA",
     coverage: Array.isArray(exam.coverage) ? exam.coverage : [],
     section: exam.sectionName || "Section",
+    gradeLevel: exam.gradeLevel || "Grade",
     students: Number(exam.students ?? exam.submissions?.total ?? 0),
     submissions: {
       submitted: Number(exam.submissions?.submitted ?? 0),
@@ -101,13 +145,22 @@ export default function TeacherExamHallPage() {
     if (typeof window === "undefined") return "All Grade Levels";
     return window.localStorage.getItem("teacher_selected_grade") || "All Grade Levels";
   });
+  const [selectedSubject, setSelectedSubject] = useState(() => {
+    if (typeof window === "undefined") return "All Subjects";
+    return window.localStorage.getItem("teacher_selected_subject_exam") || "All Subjects";
+  });
   const [selectedExam, setSelectedExam] = useState<TeacherExam | null>(null);
 
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [saveError, setSaveError] = useState("");
+  const [saveSuccess, setSaveSuccess] = useState("");
   const [scheduleError, setScheduleError] = useState("");
+  const [newExamDateError, setNewExamDateError] = useState("");
+  const [editExamDateError, setEditExamDateError] = useState("");
+  const [examToDelete, setExamToDelete] = useState<TeacherExam | null>(null);
+  const [isDeletingExam, setIsDeletingExam] = useState(false);
 
   const [newExam, setNewExam] = useState({
     classId: "",
@@ -115,9 +168,9 @@ export default function TeacherExamHallPage() {
     date: "",
     startTime: "",
     duration: "60 mins",
+    building: "",
     room: "",
     coverageText: "",
-    status: "Scheduled" as ExamStatus,
   });
   const [editExam, setEditExam] = useState({
     id: 0,
@@ -125,6 +178,7 @@ export default function TeacherExamHallPage() {
     date: "",
     startTime: "",
     duration: "60 mins",
+    building: "",
     room: "",
     coverageText: "",
     status: "Scheduled" as ExamStatus,
@@ -156,7 +210,22 @@ export default function TeacherExamHallPage() {
     }
     return ["All Grade Levels", ...Array.from(uniq.values())];
   }, [teacherClasses]);
-  const filteredExams = useMemo(() => exams, [exams]);
+  const subjectOptions = useMemo(() => {
+    const uniq = new Set<string>();
+    for (const cls of teacherClasses) {
+      const subject = normalizeValue(cls.subjectName);
+      if (subject) uniq.add(subject);
+    }
+    for (const exam of exams) {
+      const subject = normalizeValue(exam.subject);
+      if (subject) uniq.add(subject);
+    }
+    return ["All Subjects", ...Array.from(uniq)];
+  }, [exams, teacherClasses]);
+  const filteredExams = useMemo(() => {
+    if (selectedSubject === "All Subjects") return exams;
+    return exams.filter((exam) => exam.subject === selectedSubject);
+  }, [exams, selectedSubject]);
   const filteredTeacherClasses = useMemo(() => {
     return teacherClasses.filter((c) => {
       const section = normalizeValue(c.name);
@@ -182,10 +251,13 @@ export default function TeacherExamHallPage() {
       ]);
       const classRows = Array.isArray(classesRes.data?.classes) ? (classesRes.data.classes as TeacherClass[]) : [];
       const examRows = Array.isArray(examsRes.data?.exams) ? (examsRes.data.exams as ApiExam[]) : [];
+      const mappedExams = examRows.map(mapApiExam);
       setTeacherClasses(classRows);
-      setExams(examRows.map(mapApiExam));
+      setExams(mappedExams);
+      return mappedExams;
     } catch {
       setSaveError("Failed to load exam data.");
+      return [];
     } finally {
       setIsLoading(false);
     }
@@ -201,6 +273,9 @@ export default function TeacherExamHallPage() {
     window.localStorage.setItem("teacher_selected_grade", selectedGrade);
   }, [selectedGrade]);
   useEffect(() => {
+    window.localStorage.setItem("teacher_selected_subject_exam", selectedSubject);
+  }, [selectedSubject]);
+  useEffect(() => {
     if (!sectionOptions.includes(selectedSection)) {
       setSelectedSection("All Sections");
     }
@@ -210,9 +285,28 @@ export default function TeacherExamHallPage() {
       setSelectedGrade("All Grade Levels");
     }
   }, [gradeOptions, selectedGrade]);
+  useEffect(() => {
+    if (!subjectOptions.includes(selectedSubject)) {
+      setSelectedSubject("All Subjects");
+    }
+  }, [selectedSubject, subjectOptions]);
+  useEffect(() => {
+    if (!saveSuccess) return;
+    const timer = window.setTimeout(() => setSaveSuccess(""), 2500);
+    return () => window.clearTimeout(timer);
+  }, [saveSuccess]);
+  useEffect(() => {
+    if (!saveError) return;
+    const timer = window.setTimeout(() => setSaveError(""), 3000);
+    return () => window.clearTimeout(timer);
+  }, [saveError]);
+  useEffect(() => {
+    if (!scheduleError) return;
+    const timer = window.setTimeout(() => setScheduleError(""), 3000);
+    return () => window.clearTimeout(timer);
+  }, [scheduleError]);
 
   const scheduledCount = useMemo(() => filteredExams.filter((e) => e.status === "Scheduled").length, [filteredExams]);
-  const draftingCount = useMemo(() => filteredExams.filter((e) => e.status === "Drafting").length, [filteredExams]);
 
   const togglePublish = async (id: number) => {
     const exam = exams.find((e) => e.id === id);
@@ -226,13 +320,24 @@ export default function TeacherExamHallPage() {
     }
   };
 
-  const markCompleted = async (id: number) => {
+  const markCompleted = async (exam: TeacherExam) => {
+    setSaveError("");
+    setSaveSuccess("");
+    setIsDeletingExam(true);
     try {
-      await api.patch(`/api/exams/${id}`, { status: "Completed" });
-      await loadData();
-      setSelectedExam((prev) => (prev && prev.id === id ? { ...prev, status: "Completed" } : prev));
-    } catch {
-      setSaveError("Failed to mark exam as completed.");
+      const { data } = await api.delete(`/api/exams/${exam.id}`);
+      setExams((prev) => prev.filter((item) => item.id !== exam.id));
+      setSelectedExam((prev) => (prev?.id === exam.id ? null : prev));
+      setExamToDelete(null);
+      setSaveSuccess(data?.message || "Exam schedule marked as done and deleted successfully.");
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message ||
+        (err as { message?: string })?.message ||
+        "Failed to delete exam.";
+      setSaveError(message);
+    } finally {
+      setIsDeletingExam(false);
     }
   };
 
@@ -249,8 +354,14 @@ export default function TeacherExamHallPage() {
   const handleSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
     setScheduleError("");
+    setSaveSuccess("");
+    setNewExamDateError("");
     if (!selectedClass) {
       setScheduleError("Please select a class first.");
+      return;
+    }
+    if (isPastExamSchedule(newExam.date, newExam.startTime)) {
+      setNewExamDateError("You cannot create an exam schedule with a past date.");
       return;
     }
 
@@ -267,29 +378,33 @@ export default function TeacherExamHallPage() {
         date: newExam.date,
         startTime: newExam.startTime,
         duration: newExam.duration,
-        status: newExam.status,
-        room: newExam.room || "TBA",
+        room: combineExamLocation(newExam.building, newExam.room),
         coverage,
       });
 
       await loadData();
       setIsScheduleOpen(false);
-      setNewExam({ classId: "", title: "", date: "", startTime: "", duration: "60 mins", room: "", coverageText: "", status: "Scheduled" });
+      setNewExam({ classId: "", title: "", date: "", startTime: "", duration: "60 mins", building: "", room: "", coverageText: "" });
+      setSaveSuccess("Exam schedule created successfully.");
     } catch (err: unknown) {
       const message =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message || "Failed to schedule exam.";
+        (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message ||
+        (err as { message?: string })?.message ||
+        "Failed to schedule exam.";
       setScheduleError(message);
     }
   };
 
   const openEditExam = (exam: TeacherExam) => {
+    const location = splitExamLocation(exam.room);
     setEditExam({
       id: exam.id,
       title: exam.title,
       date: exam.date,
       startTime: exam.startTime || "",
       duration: exam.duration,
-      room: exam.room === "TBA" ? "" : exam.room,
+      building: location.building,
+      room: location.room,
       coverageText: (exam.coverage || []).join(", "),
       status: exam.status,
     });
@@ -299,6 +414,12 @@ export default function TeacherExamHallPage() {
   const handleEditExam = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaveError("");
+    setSaveSuccess("");
+    setEditExamDateError("");
+    if (isPastExamSchedule(editExam.date, editExam.startTime)) {
+      setEditExamDateError("You cannot create an exam schedule with a past date.");
+      return;
+    }
     try {
       const coverage = editExam.coverageText
         .split(/\n|,/)
@@ -309,28 +430,21 @@ export default function TeacherExamHallPage() {
         date: editExam.date,
         startTime: editExam.startTime,
         duration: editExam.duration,
-        room: editExam.room || "TBA",
+        room: combineExamLocation(editExam.building, editExam.room),
         status: editExam.status,
         coverage,
       });
-      await loadData();
+      const refreshedExams = await loadData();
+      const savedExam = refreshedExams.find((exam) => exam.id === editExam.id) ?? null;
       setIsEditOpen(false);
-      setSelectedExam((prev) =>
-        prev && prev.id === editExam.id
-          ? {
-              ...prev,
-              title: editExam.title,
-              date: editExam.date,
-              startTime: editExam.startTime,
-              duration: editExam.duration,
-              room: editExam.room || "TBA",
-              status: editExam.status,
-              coverage,
-            }
-          : prev
-      );
-    } catch {
-      setSaveError("Failed to update exam.");
+      setSelectedExam(savedExam);
+      setSaveSuccess("Exam schedule updated successfully.");
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message ||
+        (err as { message?: string })?.message ||
+        "Failed to update exam.";
+      setSaveError(message);
     }
   };
 
@@ -338,51 +452,68 @@ export default function TeacherExamHallPage() {
     <div className="mx-auto max-w-7xl p-6">
       <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Exam Hall (Teacher)</h1>
-          <p className="text-gray-500">Schedule exams, track submissions, and manage grading.</p>
+          <h1 className="text-2xl font-bold text-gray-800">Exam Schedule Teacher</h1>
+          <p className="text-gray-500">Schedule exams.</p>
 
           <div className="mt-2 flex flex-wrap gap-2 text-sm text-gray-500">
             <span>
               Scheduled: <span className="font-semibold text-gray-700">{scheduledCount}</span>
             </span>
-            <span className="text-gray-300">•</span>
-            <span>
-              Drafting: <span className="font-semibold text-gray-700">{draftingCount}</span>
-            </span>
           </div>
         </div>
 
-        <div className="flex w-full flex-wrap items-center gap-3 md:w-auto">
-          <select
-            value={selectedSection}
-            onChange={(e) => setSelectedSection(e.target.value)}
-            className="h-10 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500"
-            aria-label="Select section"
-          >
-            {sectionOptions.map((section) => (
-              <option key={section} value={section}>
-                {section}
-              </option>
-            ))}
-          </select>
-          <select
-            value={selectedGrade}
-            onChange={(e) => setSelectedGrade(e.target.value)}
-            className="h-10 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500"
-            aria-label="Select grade level"
-          >
-            {gradeOptions.map((grade) => (
-              <option key={grade} value={grade}>
-                {grade}
-              </option>
-            ))}
-          </select>
+        <div className="flex w-full flex-wrap items-center gap-3 md:w-auto md:flex-nowrap">
+          <div className="relative min-w-[190px]">
+            <select
+              value={selectedGrade}
+              onChange={(e) => setSelectedGrade(e.target.value)}
+              className="h-10 w-full appearance-none rounded-xl border border-gray-200 bg-white px-3 pr-10 text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500"
+              aria-label="Select grade level"
+            >
+              {gradeOptions.map((grade) => (
+                <option key={grade} value={grade}>
+                  {grade}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          </div>
+          <div className="relative min-w-[180px]">
+            <select
+              value={selectedSection}
+              onChange={(e) => setSelectedSection(e.target.value)}
+              className="h-10 w-full appearance-none rounded-xl border border-gray-200 bg-white px-3 pr-10 text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500"
+              aria-label="Select section"
+            >
+              {sectionOptions.map((section) => (
+                <option key={section} value={section}>
+                  {section}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          </div>
+          <div className="relative min-w-[180px]">
+            <select
+              value={selectedSubject}
+              onChange={(e) => setSelectedSubject(e.target.value)}
+              className="h-10 w-full appearance-none rounded-xl border border-gray-200 bg-white px-3 pr-10 text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500"
+              aria-label="Select subject"
+            >
+              {subjectOptions.map((subject) => (
+                <option key={subject} value={subject}>
+                  {subject}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          </div>
           <button
             onClick={() => {
               setScheduleError("");
               setIsScheduleOpen(true);
             }}
-            className="flex h-10 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 font-semibold text-white shadow-lg shadow-indigo-200 transition-colors hover:bg-indigo-700"
+            className="flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-indigo-600 px-4 py-2 font-semibold text-white shadow-lg shadow-indigo-200 transition-colors hover:bg-indigo-700"
             type="button"
           >
             <Plus className="h-5 w-5" />
@@ -391,8 +522,21 @@ export default function TeacherExamHallPage() {
         </div>
       </div>
 
+      {saveSuccess ? (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 transition-opacity duration-300">
+          <span>{saveSuccess}</span>
+          <button type="button" onClick={() => setSaveSuccess("")} className="text-green-700/70 transition-colors hover:text-green-800">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      ) : null}
       {saveError ? (
-        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{saveError}</div>
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 transition-opacity duration-300">
+          <span>{saveError}</span>
+          <button type="button" onClick={() => setSaveError("")} className="text-red-700/70 transition-colors hover:text-red-800">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       ) : null}
       {isLoading ? <div className="mb-4 text-sm text-gray-500">Loading exams...</div> : null}
 
@@ -400,28 +544,20 @@ export default function TeacherExamHallPage() {
         {filteredExams.map((exam) => (
           <div
             key={exam.id}
-            className="cursor-pointer overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg"
+            className="cursor-pointer rounded-2xl border border-gray-100 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg"
             onClick={() => setSelectedExam(exam)}
           >
-            <div className={`h-3 ${exam.color}`} />
             <div className="p-6">
               <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
                 <span className={`rounded-full px-3 py-1 text-xs font-bold text-white ${exam.color}`}>
                   {exam.subject}
                 </span>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={`rounded-md px-2 py-1 text-xs font-semibold ${statusPill(exam.status)}`}>
-                    {exam.status}
-                  </span>
-                  <span className={`rounded-md px-2 py-1 text-xs font-semibold ${gradingPill(exam.gradingStatus)}`}>
-                    {exam.gradingStatus}
-                  </span>
-                </div>
               </div>
 
               <h3 className="line-clamp-2 text-xl font-bold text-gray-800">{exam.title}</h3>
-              <p className="mt-1 text-sm text-gray-500">{exam.section}</p>
+              <p className="mt-1 text-sm text-gray-500">
+                {exam.gradeLevel} • {exam.section}
+              </p>
 
               <div className="mt-5 space-y-3">
                 <div className="flex items-center gap-3 text-sm text-gray-600">
@@ -441,47 +577,22 @@ export default function TeacherExamHallPage() {
                   <Users className="h-4 w-4 text-gray-400" />
                   <span>{exam.students} students</span>
                 </div>
-                <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                  <div className="mb-2 flex items-center justify-between text-xs font-semibold text-gray-600">
-                    <span className="inline-flex items-center gap-1">
-                      <ClipboardList className="h-4 w-4 text-gray-400" />
-                      Submissions
-                    </span>
-                    <span className="text-gray-700">
-                      {exam.submissions?.submitted ?? 0}/{exam.submissions?.total ?? exam.students}
-                    </span>
-                  </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-white">
-                    <div
-                      className="h-full rounded-full bg-indigo-500"
-                      style={{
-                        width: `${
-                          (exam.submissions?.total ?? exam.students)
-                            ? Math.round(
-                                ((exam.submissions?.submitted ?? 0) /
-                                  (exam.submissions?.total ?? exam.students)) *
-                                  100
-                              )
-                            : 0
-                        }%`,
-                      }}
-                    />
-                  </div>
-                </div>
               </div>
 
               <div className="mt-6 flex gap-3 border-t border-gray-100 pt-4">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    void togglePublish(exam.id);
+                    setExamToDelete(exam);
                   }}
                   className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ${
-                    exam.publishResults ? "bg-green-50 text-green-700 hover:bg-green-100" : "bg-gray-50 text-gray-700 hover:bg-gray-100"
+                    exam.status === "Completed"
+                      ? "bg-green-50 text-green-700 hover:bg-green-100"
+                      : "bg-gray-50 text-gray-700 hover:bg-gray-100"
                   }`}
                   type="button"
                 >
-                  {exam.publishResults ? "Results Published" : "Publish Results"}
+                  {exam.status === "Completed" ? "Done" : "Mark as Done"}
                 </button>
 
                 <button
@@ -511,8 +622,6 @@ export default function TeacherExamHallPage() {
       {selectedExam ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={() => setSelectedExam(null)}>
           <div onClick={(e) => e.stopPropagation()} className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl">
-            <div className={`h-4 ${selectedExam.color}`} />
-
             <div className="p-6">
               <div className="mb-6 flex items-start justify-between">
                 <div>
@@ -575,39 +684,69 @@ export default function TeacherExamHallPage() {
               </div>
 
               <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-                <h3 className="mb-3 font-bold text-gray-800">Teacher Controls</h3>
-
-                <div className="mb-4 flex flex-wrap gap-2">
-                  <button type="button" onClick={() => void setGradingStatus(selectedExam.id, "Not Started")} className="rounded-xl border px-3 py-2 text-sm hover:bg-white">Grading: Not Started</button>
-                  <button type="button" onClick={() => void setGradingStatus(selectedExam.id, "In Progress")} className="rounded-xl border px-3 py-2 text-sm hover:bg-white">Grading: In Progress</button>
-                  <button type="button" onClick={() => void setGradingStatus(selectedExam.id, "Done")} className="rounded-xl border px-3 py-2 text-sm hover:bg-white">Grading: Done</button>
-                </div>
-
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm text-gray-600">
-                    Submissions: <span className="font-semibold text-gray-800">{selectedExam.submissions?.submitted ?? 0}/{selectedExam.submissions?.total ?? selectedExam.students}</span>
-                  </div>
-
-                  <button type="button" onClick={() => void togglePublish(selectedExam.id)} className={`rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${selectedExam.publishResults ? "bg-green-50 text-green-700 hover:bg-green-100" : "bg-indigo-600 text-white hover:bg-indigo-700"}`}>
-                    {selectedExam.publishResults ? "Unpublish Results" : "Publish Results"}
-                  </button>
-                </div>
-
-                <div className="mt-4">
+                <div>
                   <p className="mb-2 text-sm font-semibold text-gray-800">Coverage</p>
-                  <ul className="list-disc space-y-1 pl-5 text-sm text-gray-600">
-                    {(selectedExam.coverage || []).map((c) => (
-                      <li key={c}>{c}</li>
-                    ))}
-                  </ul>
+                  {(selectedExam.coverage || []).length ? (
+                    <ul className="list-disc space-y-1 pl-5 text-sm text-gray-600">
+                      {(selectedExam.coverage || []).map((c, index) => (
+                        <li key={`${c}-${index}`}>{c}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-gray-500">No coverage added yet.</p>
+                  )}
                 </div>
+
               </div>
 
               <div className="mt-6 flex gap-3">
                 <button onClick={() => setSelectedExam(null)} className="flex-1 rounded-xl border border-gray-200 py-2.5 font-semibold text-gray-600 transition-colors hover:bg-gray-50" type="button">Close</button>
                 <button onClick={() => openEditExam(selectedExam)} className="flex-1 rounded-xl border border-gray-200 py-2.5 font-semibold text-gray-700 transition-colors hover:bg-gray-50" type="button">Edit Exam</button>
-                <button onClick={() => void markCompleted(selectedExam.id)} className="flex-1 rounded-xl bg-indigo-600 py-2.5 font-semibold text-white shadow-lg shadow-indigo-200 transition-colors hover:bg-indigo-700" type="button">Mark Exam as Completed</button>
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {examToDelete ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-start gap-3">
+              <div className="rounded-full bg-amber-50 p-2 text-amber-600">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Mark Exam as Done</h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  Mark this exam as done? This will permanently delete it from the system.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              This action will delete this exam schedule from the system.
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (isDeletingExam) return;
+                  setExamToDelete(null);
+                }}
+                className="flex-1 rounded-xl border border-gray-200 py-2.5 font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                disabled={isDeletingExam}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void markCompleted(examToDelete)}
+                className="flex-1 rounded-xl bg-red-600 py-2.5 font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isDeletingExam}
+              >
+                {isDeletingExam ? "Deleting..." : "Mark as Done"}
+              </button>
             </div>
           </div>
         </div>
@@ -632,7 +771,7 @@ export default function TeacherExamHallPage() {
                   <option value="">Select class</option>
                   {filteredTeacherClasses.map((cls) => (
                     <option key={cls.id} value={cls.id}>
-                      {(cls.subjectName || "Subject") + " - " + (cls.name || cls.gradeLevel || `Class ${cls.id}`)}
+                      {formatClassOptionLabel(cls)}
                     </option>
                   ))}
                 </select>
@@ -657,11 +796,37 @@ export default function TeacherExamHallPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Date</label>
-                  <input required type="date" value={newExam.date} onChange={(e) => setNewExam({ ...newExam, date: e.target.value })} className="w-full rounded-xl border border-gray-200 px-4 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-indigo-500" />
+                  <input
+                    required
+                    type="date"
+                    value={newExam.date}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setNewExam({ ...newExam, date: value });
+                      setNewExamDateError(
+                        isPastExamSchedule(value, newExam.startTime) ? "You cannot create an exam schedule with a past date." : ""
+                      );
+                    }}
+                    className={`w-full rounded-xl border px-4 py-2 outline-none focus:border-transparent focus:ring-2 ${
+                      newExamDateError ? "border-red-300 focus:ring-red-100" : "border-gray-200 focus:ring-indigo-500"
+                    }`}
+                  />
+                  {newExamDateError ? <p className="mt-1 text-xs text-red-600">{newExamDateError}</p> : null}
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Start Time</label>
-                  <input type="time" value={newExam.startTime} onChange={(e) => setNewExam({ ...newExam, startTime: e.target.value })} className="w-full rounded-xl border border-gray-200 px-4 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-indigo-500" />
+                  <input
+                    type="time"
+                    value={newExam.startTime}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setNewExam({ ...newExam, startTime: value });
+                      setNewExamDateError(
+                        isPastExamSchedule(newExam.date, value) ? "You cannot create an exam schedule with a past date." : ""
+                      );
+                    }}
+                    className="w-full rounded-xl border border-gray-200 px-4 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-indigo-500"
+                  />
                 </div>
               </div>
 
@@ -671,8 +836,25 @@ export default function TeacherExamHallPage() {
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Room / Venue</label>
-                <input type="text" value={newExam.room} onChange={(e) => setNewExam({ ...newExam, room: e.target.value })} className="w-full rounded-xl border border-gray-200 px-4 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-indigo-500" placeholder="e.g. Room 305 / Google Form" />
+                <label className="mb-1 block text-sm font-medium text-gray-700">Building</label>
+                <input
+                  type="text"
+                  value={newExam.building}
+                  onChange={(e) => setNewExam({ ...newExam, building: e.target.value })}
+                  className="w-full rounded-xl border border-gray-200 px-4 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-indigo-500"
+                  placeholder="e.g. Building 1"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Room</label>
+                <input
+                  type="text"
+                  value={newExam.room}
+                  onChange={(e) => setNewExam({ ...newExam, room: e.target.value })}
+                  className="w-full rounded-xl border border-gray-200 px-4 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Room number"
+                />
               </div>
 
               <div>
@@ -684,16 +866,6 @@ export default function TeacherExamHallPage() {
                   className="w-full rounded-xl border border-gray-200 px-4 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-indigo-500"
                   placeholder="Enter topics separated by comma or new line"
                 />
-                <p className="mt-1 text-xs text-gray-500">This will be shown to students for review.</p>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Status</label>
-                <select value={newExam.status} onChange={(e) => setNewExam({ ...newExam, status: e.target.value as ExamStatus })} className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-indigo-500">
-                  <option value="Scheduled">Scheduled</option>
-                  <option value="Drafting">Drafting</option>
-                  <option value="Completed">Completed</option>
-                </select>
               </div>
 
               <div className="flex gap-3 pt-4">
@@ -724,11 +896,37 @@ export default function TeacherExamHallPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Date</label>
-                  <input required type="date" value={editExam.date} onChange={(e) => setEditExam({ ...editExam, date: e.target.value })} className="w-full rounded-xl border border-gray-200 px-4 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-indigo-500" />
+                  <input
+                    required
+                    type="date"
+                    value={editExam.date}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setEditExam({ ...editExam, date: value });
+                      setEditExamDateError(
+                        isPastExamSchedule(value, editExam.startTime) ? "You cannot create an exam schedule with a past date." : ""
+                      );
+                    }}
+                    className={`w-full rounded-xl border px-4 py-2 outline-none focus:border-transparent focus:ring-2 ${
+                      editExamDateError ? "border-red-300 focus:ring-red-100" : "border-gray-200 focus:ring-indigo-500"
+                    }`}
+                  />
+                  {editExamDateError ? <p className="mt-1 text-xs text-red-600">{editExamDateError}</p> : null}
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Start Time</label>
-                  <input type="time" value={editExam.startTime} onChange={(e) => setEditExam({ ...editExam, startTime: e.target.value })} className="w-full rounded-xl border border-gray-200 px-4 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-indigo-500" />
+                  <input
+                    type="time"
+                    value={editExam.startTime}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setEditExam({ ...editExam, startTime: value });
+                      setEditExamDateError(
+                        isPastExamSchedule(editExam.date, value) ? "You cannot create an exam schedule with a past date." : ""
+                      );
+                    }}
+                    className="w-full rounded-xl border border-gray-200 px-4 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-indigo-500"
+                  />
                 </div>
               </div>
 
@@ -738,8 +936,25 @@ export default function TeacherExamHallPage() {
                 </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Room / Venue</label>
-                <input type="text" value={editExam.room} onChange={(e) => setEditExam({ ...editExam, room: e.target.value })} className="w-full rounded-xl border border-gray-200 px-4 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-indigo-500" />
+                <label className="mb-1 block text-sm font-medium text-gray-700">Building</label>
+                <input
+                  type="text"
+                  value={editExam.building}
+                  onChange={(e) => setEditExam({ ...editExam, building: e.target.value })}
+                  className="w-full rounded-xl border border-gray-200 px-4 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-indigo-500"
+                  placeholder="e.g. Building 1"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Room</label>
+                <input
+                  type="text"
+                  value={editExam.room}
+                  onChange={(e) => setEditExam({ ...editExam, room: e.target.value })}
+                  className="w-full rounded-xl border border-gray-200 px-4 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Room number"
+                />
               </div>
 
               <div>

@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { Op } from "sequelize";
 import { sequelize } from "../../config/db";
 import { Attendance } from "../../db/models/Attendance.model";
+import { calculateAttendancePercentage } from "../../utils/calculations";
 import { Class } from "../../db/models/Class.model";
 import { Exam } from "../../db/models/Exam.model";
 import { Grade } from "../../db/models/Grade.model";
@@ -29,9 +30,16 @@ export type UpdateParentInput = {
 
 export async function createParent(input: CreateParentInput) {
   return sequelize.transaction(async (t) => {
-    const existing = await User.findOne({ where: { email: input.email }, transaction: t });
+    const existing = await User.findOne({
+      where: { email: input.email },
+      transaction: t,
+    });
     if (existing) {
-      return { ok: false as const, code: 409 as const, message: "Email already in use" };
+      return {
+        ok: false as const,
+        code: 409 as const,
+        message: "Email already in use",
+      };
     }
 
     const passwordHash = await bcrypt.hash(input.password, 10);
@@ -42,7 +50,7 @@ export async function createParent(input: CreateParentInput) {
         role: "parent",
         refreshTokenHash: null,
       },
-      { transaction: t }
+      { transaction: t },
     );
 
     const parent = await Parent.create(
@@ -53,7 +61,7 @@ export async function createParent(input: CreateParentInput) {
         phone: input.phone ?? null,
         studentId: input.studentId ?? null,
       },
-      { transaction: t }
+      { transaction: t },
     );
 
     return {
@@ -87,10 +95,50 @@ export async function getParentOverviewByUserId(userId: string) {
       exams: { upcoming: 0, completed: 0 },
       grades: { average: 0, publishedCount: 0 },
       gradeTable: [
-        { quarter: "Quarter 1", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
-        { quarter: "Quarter 2", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
-        { quarter: "Quarter 3", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
-        { quarter: "Quarter 4", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
+        {
+          quarter: "Quarter 1",
+          math: 0,
+          science: 0,
+          english: 0,
+          filipino: 0,
+          mapeh: 0,
+          ap: 0,
+          tle: 0,
+          values: 0,
+        },
+        {
+          quarter: "Quarter 2",
+          math: 0,
+          science: 0,
+          english: 0,
+          filipino: 0,
+          mapeh: 0,
+          ap: 0,
+          tle: 0,
+          values: 0,
+        },
+        {
+          quarter: "Quarter 3",
+          math: 0,
+          science: 0,
+          english: 0,
+          filipino: 0,
+          mapeh: 0,
+          ap: 0,
+          tle: 0,
+          values: 0,
+        },
+        {
+          quarter: "Quarter 4",
+          math: 0,
+          science: 0,
+          english: 0,
+          filipino: 0,
+          mapeh: 0,
+          ap: 0,
+          tle: 0,
+          values: 0,
+        },
       ],
     };
   }
@@ -104,10 +152,50 @@ export async function getParentOverviewByUserId(userId: string) {
       exams: { upcoming: 0, completed: 0 },
       grades: { average: 0, publishedCount: 0 },
       gradeTable: [
-        { quarter: "Quarter 1", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
-        { quarter: "Quarter 2", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
-        { quarter: "Quarter 3", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
-        { quarter: "Quarter 4", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
+        {
+          quarter: "Quarter 1",
+          math: 0,
+          science: 0,
+          english: 0,
+          filipino: 0,
+          mapeh: 0,
+          ap: 0,
+          tle: 0,
+          values: 0,
+        },
+        {
+          quarter: "Quarter 2",
+          math: 0,
+          science: 0,
+          english: 0,
+          filipino: 0,
+          mapeh: 0,
+          ap: 0,
+          tle: 0,
+          values: 0,
+        },
+        {
+          quarter: "Quarter 3",
+          math: 0,
+          science: 0,
+          english: 0,
+          filipino: 0,
+          mapeh: 0,
+          ap: 0,
+          tle: 0,
+          values: 0,
+        },
+        {
+          quarter: "Quarter 4",
+          math: 0,
+          science: 0,
+          english: 0,
+          filipino: 0,
+          mapeh: 0,
+          ap: 0,
+          tle: 0,
+          values: 0,
+        },
       ],
     };
   }
@@ -131,14 +219,22 @@ export async function getParentOverviewByUserId(userId: string) {
       : Promise.resolve([]),
   ]);
 
-  const present = attendanceRows.filter((row) => row.status === "present").length;
+  const present = attendanceRows.filter(
+    (row) => row.status === "present",
+  ).length;
   const late = attendanceRows.filter((row) => row.status === "late").length;
   const absent = attendanceRows.filter((row) => row.status === "absent").length;
-  const attendanceRate = attendanceRows.length ? Math.round((present / attendanceRows.length) * 100) : 0;
+  const attendanceRate = calculateAttendancePercentage(
+    present,
+    attendanceRows.length,
+  );
 
   const quizSubmitted = quizAttempts.length;
   const quizAverage = quizSubmitted
-    ? Math.round(quizAttempts.reduce((sum, row) => sum + Number(row.score ?? 0), 0) / quizSubmitted)
+    ? Math.round(
+        quizAttempts.reduce((sum, row) => sum + Number(row.score ?? 0), 0) /
+          quizSubmitted,
+      )
     : 0;
 
   const classIds = classes.map((row) => Number(row.id));
@@ -162,8 +258,12 @@ export async function getParentOverviewByUserId(userId: string) {
   ]);
 
   const today = new Date().toISOString().slice(0, 10);
-  const upcomingExams = examRows.filter((row) => String(row.examDate) >= today).length;
-  const completedExams = examRows.filter((row) => String(row.status).toLowerCase() === "completed").length;
+  const upcomingExams = examRows.filter(
+    (row) => String(row.examDate) >= today,
+  ).length;
+  const completedExams = examRows.filter(
+    (row) => String(row.status).toLowerCase() === "completed",
+  ).length;
 
   const gradeItemIds = gradeItems.map((row) => Number(row.id));
   const gradeRows = gradeItemIds.length
@@ -174,7 +274,17 @@ export async function getParentOverviewByUserId(userId: string) {
         },
       })
     : [];
-  const subjectKeyMap: Record<string, "math" | "science" | "english" | "filipino" | "mapeh" | "ap" | "tle" | "values"> = {
+  const subjectKeyMap: Record<
+    string,
+    | "math"
+    | "science"
+    | "english"
+    | "filipino"
+    | "mapeh"
+    | "ap"
+    | "tle"
+    | "values"
+  > = {
     math: "math",
     mathematics: "math",
     science: "science",
@@ -188,19 +298,68 @@ export async function getParentOverviewByUserId(userId: string) {
     "aralin panlipunan": "ap",
   };
   const gradeTable = [
-    { quarter: "Quarter 1", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
-    { quarter: "Quarter 2", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
-    { quarter: "Quarter 3", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
-    { quarter: "Quarter 4", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
+    {
+      quarter: "Quarter 1",
+      math: 0,
+      science: 0,
+      english: 0,
+      filipino: 0,
+      mapeh: 0,
+      ap: 0,
+      tle: 0,
+      values: 0,
+    },
+    {
+      quarter: "Quarter 2",
+      math: 0,
+      science: 0,
+      english: 0,
+      filipino: 0,
+      mapeh: 0,
+      ap: 0,
+      tle: 0,
+      values: 0,
+    },
+    {
+      quarter: "Quarter 3",
+      math: 0,
+      science: 0,
+      english: 0,
+      filipino: 0,
+      mapeh: 0,
+      ap: 0,
+      tle: 0,
+      values: 0,
+    },
+    {
+      quarter: "Quarter 4",
+      math: 0,
+      science: 0,
+      english: 0,
+      filipino: 0,
+      mapeh: 0,
+      ap: 0,
+      tle: 0,
+      values: 0,
+    },
   ];
-  const scoreByItemId = new Map(gradeRows.map((row) => [Number(row.gradeItemId), Number(row.score ?? 0)]));
+  const scoreByItemId = new Map(
+    gradeRows.map((row) => [Number(row.gradeItemId), Number(row.score ?? 0)]),
+  );
   for (const item of gradeItems) {
     const parts = String(item.name ?? "").split("|");
     if (parts.length < 2) continue;
     const termRaw = parts[0]?.trim() || "";
     const subjectRaw = parts[1]?.trim().toLowerCase() || "";
-    const quarter =
-      termRaw.startsWith("1") ? "Quarter 1" : termRaw.startsWith("2") ? "Quarter 2" : termRaw.startsWith("3") ? "Quarter 3" : termRaw.startsWith("4") ? "Quarter 4" : "";
+    const quarter = termRaw.startsWith("1")
+      ? "Quarter 1"
+      : termRaw.startsWith("2")
+        ? "Quarter 2"
+        : termRaw.startsWith("3")
+          ? "Quarter 3"
+          : termRaw.startsWith("4")
+            ? "Quarter 4"
+            : "";
     const subjectKey = subjectKeyMap[subjectRaw];
     if (!quarter || !subjectKey) continue;
     const targetRow = gradeTable.find((row) => row.quarter === quarter);
@@ -209,7 +368,10 @@ export async function getParentOverviewByUserId(userId: string) {
   }
   const publishedCount = gradeRows.length;
   const gradeAverage = publishedCount
-    ? Math.round(gradeRows.reduce((sum, row) => sum + Number(row.score ?? 0), 0) / publishedCount)
+    ? Math.round(
+        gradeRows.reduce((sum, row) => sum + Number(row.score ?? 0), 0) /
+          publishedCount,
+      )
     : 0;
 
   return {

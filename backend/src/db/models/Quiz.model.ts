@@ -5,9 +5,11 @@ export class Quiz extends Model {
   declare id: number;
   declare classId: number | null;
   declare title: string;
-  declare settingsJson: string | null;
+  declare settingsJson: unknown;
   declare timeLimit: number | null;
   declare attemptLimit: number | null;
+  declare createdAt: Date;
+  declare updatedAt: Date;
 }
 
 Quiz.init(

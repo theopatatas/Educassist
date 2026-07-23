@@ -1,0 +1,6 @@
+"use client";
+import { Bell, Languages, Palette } from "lucide-react";
+import { AdminPanel, InsightState } from "../../admin/_components/AdminInsightsUI";
+export default function StaffAdminSettingsPage() {
+  return <div className="space-y-5"><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><p className="text-sm font-medium text-slate-500">Personal preferences</p><h2 className="mt-1 text-2xl font-bold text-slate-900 sm:text-3xl">Settings</h2><p className="mt-2 text-sm text-slate-600">Admin accounts cannot change school, academic, security, or platform configuration.</p></section><div className="grid gap-5 lg:grid-cols-3">{[["Appearance", "Theme preferences", Palette], ["Notifications", "Personal notification preferences", Bell], ["Language", "Interface language", Languages]].map(([title, description, Icon]) => <AdminPanel key={title as string} title={title as string} description={description as string}><div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-600"><Icon className="h-5 w-5" /></div><InsightState emptyLabel="This personal preference is not supported by the backend yet." /></AdminPanel>)}</div></div>;
+}

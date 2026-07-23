@@ -3,6 +3,7 @@ import { getLocal, removeLocal, setLocal } from "../../lib/storage/local";
 import type { AuthUser } from "./types";
 
 const AUTH_KEY = "educassist_auth";
+const LAST_ACTIVITY_KEY = "educassist_last_activity_at";
 
 type AuthState = {
   accessToken: string | null;
@@ -10,6 +11,7 @@ type AuthState = {
   user: AuthUser | null;
   hydrated: boolean;
   setAuth: (data: { accessToken: string; refreshToken: string; user: AuthUser }) => void;
+  updateTokens: (data: { accessToken: string; refreshToken: string }) => void;
   clearAuth: () => void;
   hydrate: () => void;
 };
@@ -22,10 +24,24 @@ export const useAuthStore = create<AuthState>((set) => ({
   setAuth: (data) => {
     set({ accessToken: data.accessToken, refreshToken: data.refreshToken, user: data.user });
     setLocal(AUTH_KEY, data);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+    }
+  },
+  updateTokens: (data) => {
+    set((state) => {
+      if (!state.user) return state;
+      const next = { accessToken: data.accessToken, refreshToken: data.refreshToken, user: state.user };
+      setLocal(AUTH_KEY, next);
+      return next;
+    });
   },
   clearAuth: () => {
     set({ accessToken: null, refreshToken: null, user: null });
     removeLocal(AUTH_KEY);
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(LAST_ACTIVITY_KEY);
+    }
   },
   hydrate: () => {
     const saved = getLocal<{ accessToken: string; refreshToken: string; user: AuthUser }>(AUTH_KEY);

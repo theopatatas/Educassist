@@ -6,7 +6,11 @@ import { useAuth } from "@/src/features/auth/hooks";
 import TeacherHeader from "./TeacherHeader";
 import TeacherSidebar from "./TeacherSidebar";
 
-export default function TeacherLayout({ children }: { children: React.ReactNode }) {
+export default function TeacherLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const router = useRouter();
   const { user, hydrated } = useAuth();
 

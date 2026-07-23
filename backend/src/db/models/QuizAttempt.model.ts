@@ -8,6 +8,9 @@ export class QuizAttempt extends Model {
   declare startedAt: Date | null;
   declare completedAt: Date | null;
   declare score: number;
+  declare penaltyPoints: number;
+  declare createdAt: Date;
+  declare updatedAt: Date;
 }
 
 QuizAttempt.init(
@@ -47,6 +50,12 @@ QuizAttempt.init(
       type: DataTypes.DECIMAL(6, 2),
       allowNull: false,
       defaultValue: 0,
+    },
+    penaltyPoints: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+      field: "penalty_points",
     },
   },
   {

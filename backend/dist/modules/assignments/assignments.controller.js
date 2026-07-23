@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listMyAssignments = listMyAssignments;
 exports.createMyAssignment = createMyAssignment;
+exports.updateMyAssignment = updateMyAssignment;
 exports.submitMyAssignment = submitMyAssignment;
 exports.listMyAssignmentResults = listMyAssignmentResults;
 const assignments_service_1 = require("./assignments.service");
@@ -11,7 +12,12 @@ async function listMyAssignments(req, res) {
     const role = user?.role;
     if (!userId)
         return res.status(401).json({ ok: false, message: "Unauthorized" });
-    const rows = role === "student" ? await (0, assignments_service_1.listAssignmentsForStudent)(userId) : await (0, assignments_service_1.listAssignmentsForTeacher)(userId);
+    const rows = role === "student"
+        ? await (0, assignments_service_1.listAssignmentsForStudent)(userId)
+        : await (0, assignments_service_1.listAssignmentsForTeacher)(userId, {
+            section: req.query.section,
+            gradeLevel: req.query.gradeLevel,
+        });
     if (rows === null) {
         return res
             .status(404)
@@ -26,9 +32,24 @@ async function createMyAssignment(req, res) {
     const assignment = await (0, assignments_service_1.createAssignmentForTeacher)(userId, req.body ?? {});
     if (assignment === null)
         return res.status(404).json({ ok: false, message: "Teacher profile not found" });
+    if (assignment === "past_date")
+        return res.status(400).json({ ok: false, message: "You cannot create an assignment with a past date." });
     if (assignment === false)
         return res.status(400).json({ ok: false, message: "Invalid class or payload" });
     return res.status(201).json({ ok: true, assignment });
+}
+async function updateMyAssignment(req, res) {
+    const userId = req.user?.sub;
+    if (!userId)
+        return res.status(401).json({ ok: false, message: "Unauthorized" });
+    const assignment = await (0, assignments_service_1.updateAssignmentForTeacher)(userId, req.params.id, req.body ?? {});
+    if (assignment === null)
+        return res.status(404).json({ ok: false, message: "Teacher profile not found" });
+    if (assignment === "past_date")
+        return res.status(400).json({ ok: false, message: "You cannot create an assignment with a past date." });
+    if (assignment === false)
+        return res.status(404).json({ ok: false, message: "Assignment not found" });
+    return res.json({ ok: true, assignment });
 }
 async function submitMyAssignment(req, res) {
     const userId = req.user?.sub;
@@ -37,6 +58,8 @@ async function submitMyAssignment(req, res) {
     const result = await (0, assignments_service_1.submitAssignmentForStudent)(userId, req.params.id);
     if (result === null)
         return res.status(404).json({ ok: false, message: "Student profile not found" });
+    if (result === "closed")
+        return res.status(400).json({ ok: false, message: "This assignment is already closed." });
     if (result === false)
         return res.status(400).json({ ok: false, message: "Assignment not found for this student" });
     return res.json({ ok: true, submission: result });

@@ -8,6 +8,7 @@ const envSchema = z.object({
   DB_HOST: z.string(),
   DB_PORT: z.coerce.number().default(3306),
   DB_NAME: z.string(),
+  DB_NAME_TEST: z.string().optional(),
   DB_USER: z.string(),
   DB_PASS: z.string().optional().default(""),
 
@@ -21,6 +22,9 @@ const envSchema = z.object({
   // ✅ optional for now
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().optional(),
+  OPENAI_BASE_URL: z.string().url().optional(),
+  MAIL_API_URL: z.string().url().optional(),
+  MAIL_API_KEY: z.string().optional(),
 
   // seed admin (dev only)
   ADMIN_SEED_EMAIL: z.string().optional(),
@@ -28,3 +32,11 @@ const envSchema = z.object({
 });
 
 export const env = envSchema.parse(process.env);
+
+if (env.NODE_ENV === "test") {
+  if (!env.DB_NAME_TEST || !/test/i.test(env.DB_NAME_TEST)) {
+    throw new Error(
+      "NODE_ENV=test requires DB_NAME_TEST with a database name containing 'test'",
+    );
+  }
+}

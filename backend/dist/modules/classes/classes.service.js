@@ -1,7 +1,11 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listClassesForTeacher = listClassesForTeacher;
 exports.listClassesForStudent = listClassesForStudent;
+exports.getClassFormOptionsForTeacher = getClassFormOptionsForTeacher;
 exports.createClassForTeacher = createClassForTeacher;
 exports.updateClassForTeacher = updateClassForTeacher;
 exports.deleteClassForTeacher = deleteClassForTeacher;
@@ -13,6 +17,7 @@ exports.savePublishedGradesForTeacher = savePublishedGradesForTeacher;
 exports.getPublishedGradesForStudent = getPublishedGradesForStudent;
 exports.getPublishedGradesForTeacher = getPublishedGradesForTeacher;
 const sequelize_1 = require("sequelize");
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const Class_model_1 = require("../../db/models/Class.model");
 const Attendance_model_1 = require("../../db/models/Attendance.model");
 const Grade_model_1 = require("../../db/models/Grade.model");
@@ -21,6 +26,7 @@ const Section_model_1 = require("../../db/models/Section.model");
 const Student_model_1 = require("../../db/models/Student.model");
 const Subject_model_1 = require("../../db/models/Subject.model");
 const Teacher_model_1 = require("../../db/models/Teacher.model");
+const User_model_1 = require("../../db/models/User.model");
 const SUBJECT_KEY_TO_NAME = {
     math: "Math",
     mathematics: "Math",
@@ -50,6 +56,23 @@ function normalizeText(value) {
     return String(value ?? "")
         .trim()
         .toLowerCase();
+}
+const WEEKDAY_OPTIONS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+function serializeMeetingDays(input) {
+    const rawDays = Array.isArray(input)
+        ? input
+        : String(input ?? "")
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean);
+    const seen = new Set();
+    for (const day of rawDays) {
+        const normalized = String(day).trim();
+        if (WEEKDAY_OPTIONS.includes(normalized)) {
+            seen.add(normalized);
+        }
+    }
+    return Array.from(seen).join(",");
 }
 function normalizeSubjectName(subject) {
     const key = normalizeText(subject);
@@ -151,6 +174,32 @@ async function listClassesForStudent(userId) {
         subjectName: c.subjectId ? subjectMap.get(Number(c.subjectId)) ?? null : null,
     }));
 }
+async function getClassFormOptionsForTeacher(userId) {
+    const teacher = await Teacher_model_1.Teacher.findOne({ where: { userId } });
+    if (!teacher)
+        return null;
+    const [sections, students, classes] = await Promise.all([
+        Section_model_1.Section.findAll({ order: [["name", "ASC"]] }),
+        Student_model_1.Student.findAll({ attributes: ["yearLevel"] }),
+        Class_model_1.Class.findAll({ where: { teacherId: teacher.id }, attributes: ["gradeLevel"] }),
+    ]);
+    const gradeLevels = new Map();
+    for (const row of [...students, ...classes]) {
+        const value = String(row.get("yearLevel") ?? row.get("gradeLevel") ?? "").trim();
+        if (!value)
+            continue;
+        const key = value.toLowerCase().replace(/\s+/g, " ").trim();
+        if (!gradeLevels.has(key))
+            gradeLevels.set(key, value);
+    }
+    return {
+        gradeLevels: Array.from(gradeLevels.values()),
+        sections: sections.map((section) => ({
+            id: Number(section.id),
+            name: section.name,
+        })),
+    };
+}
 async function createClassForTeacher(userId, input) {
     const teacher = await Teacher_model_1.Teacher.findOne({ where: { userId } });
     if (!teacher)
@@ -172,7 +221,8 @@ async function createClassForTeacher(userId, input) {
         sectionId = Number(section.id);
     }
     const resolvedClassName = (input.className ?? input.subjectName ?? null)?.toString().slice(0, 120) ?? null;
-    const meetingDay = input.meetingDay?.toString().slice(0, 20) ?? null;
+    const meetingDayValue = serializeMeetingDays(input.meetingDay);
+    const meetingDay = meetingDayValue ? meetingDayValue.slice(0, 20) : null;
     const meetingTime = input.meetingTime?.toString().slice(0, 20) ?? null;
     const cls = await Class_model_1.Class.create({
         teacherId: teacher.id,
@@ -180,6 +230,7 @@ async function createClassForTeacher(userId, input) {
         subjectId: subjectId ?? null,
         sectionId,
         gradeLevel: input.gradeLevel ?? null,
+        buildingName: input.buildingName?.trim() || null,
         meetingDay,
         meetingTime,
     });
@@ -209,22 +260,34 @@ async function updateClassForTeacher(userId, classId, input) {
         sectionId = Number(section.id);
     }
     const resolvedClassName = (input.className ?? input.subjectName ?? cls.name)?.toString().slice(0, 120) ?? null;
-    const meetingDay = (input.meetingDay ?? cls.meetingDay)?.toString().slice(0, 20) ?? null;
+    const meetingDaySource = input.meetingDay !== undefined ? input.meetingDay : cls.meetingDay;
+    const meetingDayValue = serializeMeetingDays(meetingDaySource);
+    const meetingDay = meetingDayValue ? meetingDayValue.slice(0, 20) : null;
     const meetingTime = (input.meetingTime ?? cls.meetingTime)?.toString().slice(0, 20) ?? null;
     await cls.update({
         subjectId,
         sectionId,
         gradeLevel: input.gradeLevel ?? cls.gradeLevel,
+        buildingName: input.buildingName !== undefined ? input.buildingName?.trim() || null : cls.buildingName,
         name: resolvedClassName,
         meetingDay,
         meetingTime,
     });
     return cls;
 }
-async function deleteClassForTeacher(userId, classId) {
+async function deleteClassForTeacher(userId, classId, password) {
     const teacher = await Teacher_model_1.Teacher.findOne({ where: { userId } });
     if (!teacher)
         return null;
+    const user = await User_model_1.User.findByPk(userId);
+    const normalizedPassword = String(password ?? "").trim();
+    if (!user || !user.passwordHash || !normalizedPassword) {
+        return "invalid_password";
+    }
+    const validPassword = await bcryptjs_1.default.compare(normalizedPassword, user.passwordHash);
+    if (!validPassword) {
+        return "invalid_password";
+    }
     const cls = await Class_model_1.Class.findByPk(classId);
     if (!cls || cls.teacherId !== teacher.id)
         return false;
@@ -314,7 +377,7 @@ async function savePublishedGradesForTeacher(userId, input) {
     const subjectKey = toSubjectKey(input.subject);
     if (!subjectKey)
         return false;
-    const classes = await Class_model_1.Class.findAll({ where: { teacherId: teacher.id } });
+    const classes = await Class_model_1.Class.findAll({ where: { teacherId: teacher.id }, order: [["id", "ASC"]] });
     const classIds = classes
         .filter((cls) => {
         const sectionOk = normalizeText(cls.name) === normalizeText(input.section);
@@ -434,23 +497,54 @@ async function getPublishedGradesForTeacher(userId, filter) {
     const teacher = await Teacher_model_1.Teacher.findOne({ where: { userId } });
     if (!teacher)
         return null;
-    const classes = await Class_model_1.Class.findAll({ where: { teacherId: teacher.id } });
+    const teacherClasses = await Class_model_1.Class.findAll({ where: { teacherId: teacher.id }, order: [["id", "ASC"]] });
+    const subjects = await Subject_model_1.Subject.findAll();
+    const subjectById = new Map(subjects.map((s) => [Number(s.id), s.name]));
     const section = normalizeText(filter.section);
     const gradeLevel = normalizeText(filter.gradeLevel);
-    const classIds = classes
-        .filter((cls) => {
+    const selectedSubjectKey = filter.subject ? toSubjectKey(filter.subject) : null;
+    const teacherScopeClasses = teacherClasses.filter((cls) => {
         const sectionOk = !section || section === "all sections" || normalizeText(cls.name) === section;
         const gradeOk = !gradeLevel || gradeLevel === "all grades" || normalizeText(cls.gradeLevel) === gradeLevel;
         return sectionOk && gradeOk;
-    })
-        .map((cls) => Number(cls.id));
-    if (!classIds.length)
-        return [];
-    const whereName = filter.term ? { [sequelize_1.Op.like]: `${filter.term}|%|published` } : { [sequelize_1.Op.like]: `%|published` };
-    const items = await GradeItem_model_1.GradeItem.findAll({ where: { classId: classIds, name: whereName } });
-    if (!items.length)
-        return [];
-    const itemIds = items.map((i) => Number(i.id));
-    const grades = await Grade_model_1.Grade.findAll({ where: { gradeItemId: itemIds } });
-    return grades.map((g) => g.toJSON());
+    });
+    if (!teacherScopeClasses.length)
+        return { rows: [], published: false };
+    const scopeSectionName = teacherScopeClasses[0]?.name ?? null;
+    const scopeGradeLevel = teacherScopeClasses[0]?.gradeLevel ?? null;
+    const scopedClasses = await Class_model_1.Class.findAll({
+        where: {
+            name: scopeSectionName,
+            gradeLevel: scopeGradeLevel,
+        },
+        order: [["id", "ASC"]],
+    });
+    const targetClass = scopedClasses.find((cls) => {
+        const classSubject = cls.subjectId ? subjectById.get(Number(cls.subjectId)) : null;
+        const subjectOk = !selectedSubjectKey || selectedSubjectKey === toSubjectKey(classSubject ?? "");
+        return subjectOk;
+    });
+    if (!targetClass)
+        return { rows: [], published: false };
+    const term = normalizeText(filter.term);
+    const items = await GradeItem_model_1.GradeItem.findAll({
+        where: { classId: Number(targetClass.id) },
+        order: [["id", "DESC"]],
+    });
+    const selectedItem = items.find((item) => {
+        const parsed = parseGradeItemName(item.name);
+        if (!parsed)
+            return false;
+        const termOk = !term || normalizeText(parsed.term) === term;
+        const subjectOk = !selectedSubjectKey || parsed.subjectKey === selectedSubjectKey;
+        return termOk && subjectOk;
+    });
+    if (!selectedItem)
+        return { rows: [], published: false };
+    const parsed = parseGradeItemName(selectedItem.name);
+    const grades = await Grade_model_1.Grade.findAll({ where: { gradeItemId: Number(selectedItem.id) } });
+    return {
+        rows: grades.map((g) => ({ studentId: Number(g.studentId), score: Number(g.score) })),
+        published: !!parsed?.published,
+    };
 }

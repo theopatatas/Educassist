@@ -12,6 +12,7 @@ export class Exam extends Model {
   declare status: string;
   declare room: string | null;
   declare coverageJson: unknown;
+  declare reviewerJson: unknown;
   declare gradingStatus: string;
   declare publishResults: boolean;
 }
@@ -70,6 +71,11 @@ Exam.init(
       type: DataTypes.JSON,
       allowNull: true,
       field: "coverage_json",
+    },
+    reviewerJson: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      field: "reviewer_json",
     },
     gradingStatus: {
       type: DataTypes.STRING(20),

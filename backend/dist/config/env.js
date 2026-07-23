@@ -9,6 +9,7 @@ const envSchema = zod_1.z.object({
     DB_HOST: zod_1.z.string(),
     DB_PORT: zod_1.z.coerce.number().default(3306),
     DB_NAME: zod_1.z.string(),
+    DB_NAME_TEST: zod_1.z.string().optional(),
     DB_USER: zod_1.z.string(),
     DB_PASS: zod_1.z.string().optional().default(""),
     JWT_ACCESS_SECRET: zod_1.z.string(),
@@ -19,8 +20,16 @@ const envSchema = zod_1.z.object({
     // ✅ optional for now
     OPENAI_API_KEY: zod_1.z.string().optional(),
     OPENAI_MODEL: zod_1.z.string().optional(),
+    OPENAI_BASE_URL: zod_1.z.string().url().optional(),
+    MAIL_API_URL: zod_1.z.string().url().optional(),
+    MAIL_API_KEY: zod_1.z.string().optional(),
     // seed admin (dev only)
     ADMIN_SEED_EMAIL: zod_1.z.string().optional(),
     ADMIN_SEED_PASSWORD: zod_1.z.string().optional(),
 });
 exports.env = envSchema.parse(process.env);
+if (exports.env.NODE_ENV === "test") {
+    if (!exports.env.DB_NAME_TEST || !/test/i.test(exports.env.DB_NAME_TEST)) {
+        throw new Error("NODE_ENV=test requires DB_NAME_TEST with a database name containing 'test'");
+    }
+}

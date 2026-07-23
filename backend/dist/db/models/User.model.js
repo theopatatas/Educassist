@@ -13,7 +13,7 @@ User.init({
         primaryKey: true,
     },
     role: {
-        type: sequelize_1.DataTypes.ENUM("ADMIN", "TEACHER", "STUDENT", "PARENT"),
+        type: sequelize_1.DataTypes.ENUM("SUPER_ADMIN", "ADMIN", "TEACHER", "STUDENT", "PARENT"),
         allowNull: false,
         defaultValue: "STUDENT",
     },
@@ -21,6 +21,41 @@ User.init({
         type: sequelize_1.DataTypes.STRING(255),
         allowNull: false,
         unique: true,
+    },
+    firstName: {
+        type: sequelize_1.DataTypes.STRING(100),
+        allowNull: true,
+        field: "first_name",
+    },
+    middleName: {
+        type: sequelize_1.DataTypes.STRING(100),
+        allowNull: true,
+        field: "middle_name",
+    },
+    lastName: {
+        type: sequelize_1.DataTypes.STRING(100),
+        allowNull: true,
+        field: "last_name",
+    },
+    mobileNumber: {
+        type: sequelize_1.DataTypes.STRING(11),
+        allowNull: true,
+        field: "mobile_number",
+    },
+    displayName: {
+        type: sequelize_1.DataTypes.STRING(150),
+        allowNull: true,
+        field: "display_name",
+    },
+    profilePhotoUrl: {
+        type: sequelize_1.DataTypes.STRING(500),
+        allowNull: true,
+        field: "profile_photo_url",
+    },
+    passwordChangedAt: {
+        type: sequelize_1.DataTypes.DATE,
+        allowNull: true,
+        field: "password_changed_at",
     },
     googleSub: {
         type: sequelize_1.DataTypes.STRING(255),
@@ -52,6 +87,11 @@ User.init({
         type: sequelize_1.DataTypes.DATE,
         allowNull: true,
         field: "last_login_at",
+    },
+    createdById: {
+        type: sequelize_1.DataTypes.BIGINT.UNSIGNED,
+        allowNull: true,
+        field: "created_by_id",
     },
 }, {
     sequelize: db_1.sequelize,

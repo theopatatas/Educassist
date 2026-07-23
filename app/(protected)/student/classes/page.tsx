@@ -2,12 +2,13 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "@/src/lib/http/client";
-import { Users, Clock, MapPin, ArrowRight, X, CheckCircle2, BookOpen, Calendar } from "lucide-react";
+import { Users, Clock, MapPin, X, Calendar, Building2 } from "lucide-react";
 
 type ApiClass = {
   id: number;
   name: string | null;
   gradeLevel: string | null;
+  buildingName?: string | null;
   meetingDay: string | null;
   meetingTime: string | null;
   subjectName?: string | null;
@@ -18,17 +19,16 @@ type ClassItem = {
   id: number;
   name: string;
   subject: string;
+  gradeLevel: string;
+  building: string;
   day: string;
   time: string;
   schedule: string;
   room: string;
   teacher: string;
-  myProgress: number;
-  myGrade: number;
   color: string;
   lightColor: string;
   textColor: string;
-  nextTopic: string;
 };
 
 function parseMeetingTime(rawValue: string | null | undefined) {
@@ -42,6 +42,10 @@ function parseMeetingTime(rawValue: string | null | undefined) {
   if (aLooksLikeTime && !bLooksLikeTime) return { time: partA, room: partB };
   if (!aLooksLikeTime && bLooksLikeTime) return { time: partB, room: partA };
   return { time: partA, room: partB };
+}
+
+function formatGradeSection(gradeLevel: string | null | undefined, section: string | null | undefined) {
+  return [gradeLevel?.trim(), section?.trim()].filter(Boolean).join(" • ") || "Section";
 }
 
 export default function StudentClassesPage() {
@@ -82,14 +86,13 @@ export default function StudentClassesPage() {
             id: Number(cls.id),
             name: cls.name?.trim() || "Section",
             subject,
+            gradeLevel: cls.gradeLevel?.trim() || "",
+            building: cls.buildingName?.trim() || "Building",
             day: cls.meetingDay?.trim() || "",
             time: timePart,
             schedule: [cls.meetingDay?.trim(), timePart].filter(Boolean).join(" ") || "TBA",
             room: roomPart || "TBA",
             teacher: cls.teacherName?.trim() || "Teacher",
-            myProgress: 0,
-            myGrade: 0,
-            nextTopic: "Not set",
             ...subjectTheme(subject),
           } satisfies ClassItem;
         });
@@ -108,28 +111,12 @@ export default function StudentClassesPage() {
     };
   }, []);
 
-  const overall = useMemo(() => {
-    if (!classes.length) return { avgGrade: 0, avgProgress: 0 };
-    const avgGrade = Math.round(classes.reduce((s, c) => s + c.myGrade, 0) / classes.length);
-    const avgProgress = Math.round(classes.reduce((s, c) => s + c.myProgress, 0) / classes.length);
-    return { avgGrade, avgProgress };
-  }, [classes]);
-
   return (
     <div className="mx-auto max-w-7xl p-6">
       <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">My Classes</h1>
           <p className="text-gray-500">Classes are automatically assigned from your grade level and section.</p>
-        </div>
-
-        <div className="hidden gap-2 sm:flex">
-          <span className="rounded-full border bg-indigo-50 px-3 py-1 text-sm font-medium text-indigo-700">
-            Avg Grade: {overall.avgGrade}%
-          </span>
-          <span className="rounded-full border bg-green-50 px-3 py-1 text-sm font-medium text-green-700">
-            Progress: {overall.avgProgress}%
-          </span>
         </div>
       </div>
 
@@ -147,26 +134,24 @@ export default function StudentClassesPage() {
           <div
             key={cls.id}
             onClick={() => setSelectedClass(cls)}
-            className="group cursor-pointer overflow-hidden rounded-2xl bg-white shadow-sm transition-all hover:-translate-y-1 hover:shadow-md"
+            className="cursor-pointer rounded-2xl bg-white shadow-sm transition-all hover:-translate-y-1 hover:shadow-md"
           >
-            <div className={`h-2 w-full ${cls.color}`} />
             <div className="p-6">
-              <div className="mb-4 flex items-start justify-between">
+              <div className="mb-4">
                 <span className={`rounded-full px-3 py-1 text-xs font-bold ${cls.lightColor} ${cls.textColor}`}>{cls.subject}</span>
-                <span className="rounded-md bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-600">{cls.myGrade}% Grade</span>
               </div>
 
-              <h3 className="mb-1 text-xl font-bold text-gray-800">{cls.name}</h3>
+              <h3 className="mb-1 text-xl font-bold text-gray-800">{formatGradeSection(cls.gradeLevel, cls.name)}</h3>
               <p className="mb-3 text-sm text-gray-500">
                 Teacher: <span className="font-medium text-gray-700">{cls.teacher}</span>
               </p>
 
-              <div className="mb-6 flex items-center gap-2 text-sm text-gray-500">
+              <div className="mb-4 flex items-center gap-2 text-sm text-gray-500">
                 <MapPin className="h-4 w-4" />
-                <span>{cls.room}</span>
+                <span>{cls.building} - {cls.room}</span>
               </div>
 
-              <div className="mb-6 space-y-3">
+              <div className="space-y-3">
                 <div className="flex items-center gap-3 text-sm text-gray-600">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-50 text-gray-400">
                     <Calendar className="h-4 w-4" />
@@ -180,29 +165,6 @@ export default function StudentClassesPage() {
                   </div>
                   <span className="font-medium">{cls.time || "TBA"}</span>
                 </div>
-
-                <div className="flex items-center gap-3 text-sm text-gray-600">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-50 text-gray-400">
-                    <BookOpen className="h-4 w-4" />
-                  </div>
-                  <span className="font-medium">Next: {cls.nextTopic}</span>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500">My Progress</span>
-                    <span className="font-bold text-gray-700">{cls.myProgress}%</span>
-                  </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
-                    <div className={`h-full ${cls.color}`} style={{ width: `${cls.myProgress}%` }} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end border-t border-gray-100 pt-4">
-                <button className="flex items-center gap-1 text-sm font-semibold text-indigo-600 transition-colors duration-300 group-hover:translate-x-1 hover:text-indigo-700">
-                  View Class <ArrowRight className="h-4 w-4" />
-                </button>
               </div>
             </div>
           </div>
@@ -228,11 +190,11 @@ export default function StudentClassesPage() {
                     </span>
                   </div>
 
-                  <h2 className="mb-1 text-3xl font-bold">{selectedClass.name}</h2>
+                  <h2 className="mb-1 text-3xl font-bold">{formatGradeSection(selectedClass.gradeLevel, selectedClass.name)}</h2>
 
                   <p className="flex flex-wrap items-center gap-3 opacity-90">
                     <span className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4" /> {selectedClass.room}
+                      <MapPin className="h-4 w-4" /> {selectedClass.building} - {selectedClass.room}
                     </span>
                     <span className="flex items-center gap-2">
                       <Users className="h-4 w-4" /> Teacher: {selectedClass.teacher}
@@ -250,28 +212,29 @@ export default function StudentClassesPage() {
             </div>
 
             <div className="overflow-y-auto p-6">
-              <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-                  <p className="text-xs font-bold uppercase text-gray-500">My Grade</p>
-                  <p className="text-2xl font-bold text-gray-800">{selectedClass.myGrade}%</p>
+                  <p className="text-xs font-bold uppercase text-gray-500">Teacher</p>
+                  <p className="mt-1 text-lg font-bold text-gray-800">{selectedClass.teacher}</p>
                 </div>
 
                 <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-                  <p className="text-xs font-bold uppercase text-gray-500">My Progress</p>
-                  <p className="text-2xl font-bold text-gray-800">{selectedClass.myProgress}%</p>
+                  <p className="text-xs font-bold uppercase text-gray-500">Class Days</p>
+                  <p className="mt-1 text-lg font-bold text-gray-800">{selectedClass.day || "TBA"}</p>
                 </div>
 
                 <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-                  <p className="text-xs font-bold uppercase text-gray-500">Attendance</p>
-                  <p className="flex items-center gap-2 text-2xl font-bold text-green-600">
-                    <CheckCircle2 className="h-5 w-5" /> 0%
+                  <p className="text-xs font-bold uppercase text-gray-500">Class Time</p>
+                  <p className="mt-1 text-lg font-bold text-gray-800">{selectedClass.time || "TBA"}</p>
+                </div>
+
+                <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                  <p className="text-xs font-bold uppercase text-gray-500">Location</p>
+                  <p className="mt-1 flex items-center gap-2 text-lg font-bold text-gray-800">
+                    <Building2 className="h-5 w-5 text-gray-500" />
+                    <span>{selectedClass.building} - {selectedClass.room}</span>
                   </p>
                 </div>
-              </div>
-
-              <div className="rounded-2xl border border-gray-200 bg-white p-5">
-                <h3 className="mb-2 font-bold text-gray-800">Next Topic</h3>
-                <p className="text-gray-600">{selectedClass.nextTopic}</p>
               </div>
             </div>
           </div>

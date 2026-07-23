@@ -5,6 +5,11 @@ import { chatWithAI } from "./ai.controller";
 
 const router = Router();
 
-router.post("/chat", requireAuth, requireRole("teacher"), chatWithAI);
+router.post(
+  "/chat",
+  requireAuth,
+  requireRole("admin", "managed_admin", "teacher", "student", "parent"),
+  chatWithAI,
+);
 
 export default router;

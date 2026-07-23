@@ -1,4 +1,5 @@
 import { Op } from "sequelize";
+import bcrypt from "bcryptjs";
 import { Class } from "../../db/models/Class.model";
 import { Attendance } from "../../db/models/Attendance.model";
 import { Grade } from "../../db/models/Grade.model";
@@ -7,6 +8,7 @@ import { Section } from "../../db/models/Section.model";
 import { Student } from "../../db/models/Student.model";
 import { Subject } from "../../db/models/Subject.model";
 import { Teacher } from "../../db/models/Teacher.model";
+import { User } from "../../db/models/User.model";
 
 export type CreateClassInput = {
   className?: string;
@@ -14,7 +16,8 @@ export type CreateClassInput = {
   subjectName?: string;
   sectionId?: number;
   gradeLevel?: string;
-  meetingDay?: string;
+  buildingName?: string;
+  meetingDay?: string | string[];
   meetingTime?: string;
 };
 
@@ -64,6 +67,27 @@ function normalizeText(value: unknown) {
   return String(value ?? "")
     .trim()
     .toLowerCase();
+}
+
+const WEEKDAY_OPTIONS = ["Mon", "Tue", "Wed", "Thu", "Fri"] as const;
+
+function serializeMeetingDays(input: string | string[] | null | undefined) {
+  const rawDays = Array.isArray(input)
+    ? input
+    : String(input ?? "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+  const seen = new Set<string>();
+  for (const day of rawDays) {
+    const normalized = String(day).trim();
+    if (WEEKDAY_OPTIONS.includes(normalized as (typeof WEEKDAY_OPTIONS)[number])) {
+      seen.add(normalized);
+    }
+  }
+
+  return Array.from(seen).join(",");
 }
 
 function normalizeSubjectName(subject: string) {
@@ -175,6 +199,33 @@ export async function listClassesForStudent(userId: string) {
   }));
 }
 
+export async function getClassFormOptionsForTeacher(userId: string) {
+  const teacher = await Teacher.findOne({ where: { userId } });
+  if (!teacher) return null;
+
+  const [sections, students, classes] = await Promise.all([
+    Section.findAll({ order: [["name", "ASC"]] }),
+    Student.findAll({ attributes: ["yearLevel"] }),
+    Class.findAll({ where: { teacherId: teacher.id }, attributes: ["gradeLevel"] }),
+  ]);
+
+  const gradeLevels = new Map<string, string>();
+  for (const row of [...students, ...classes]) {
+    const value = String(row.get("yearLevel") ?? row.get("gradeLevel") ?? "").trim();
+    if (!value) continue;
+    const key = value.toLowerCase().replace(/\s+/g, " ").trim();
+    if (!gradeLevels.has(key)) gradeLevels.set(key, value);
+  }
+
+  return {
+    gradeLevels: Array.from(gradeLevels.values()),
+    sections: sections.map((section) => ({
+      id: Number(section.id),
+      name: section.name,
+    })),
+  };
+}
+
 export async function createClassForTeacher(userId: string, input: CreateClassInput) {
   const teacher = await Teacher.findOne({ where: { userId } });
   if (!teacher) return null;
@@ -195,7 +246,8 @@ export async function createClassForTeacher(userId: string, input: CreateClassIn
     sectionId = Number(section.id);
   }
   const resolvedClassName = (input.className ?? input.subjectName ?? null)?.toString().slice(0, 120) ?? null;
-  const meetingDay = input.meetingDay?.toString().slice(0, 20) ?? null;
+  const meetingDayValue = serializeMeetingDays(input.meetingDay);
+  const meetingDay = meetingDayValue ? meetingDayValue.slice(0, 20) : null;
   const meetingTime = input.meetingTime?.toString().slice(0, 20) ?? null;
   const cls = await Class.create({
     teacherId: teacher.id,
@@ -203,6 +255,7 @@ export async function createClassForTeacher(userId: string, input: CreateClassIn
     subjectId: subjectId ?? null,
     sectionId,
     gradeLevel: input.gradeLevel ?? null,
+    buildingName: input.buildingName?.trim() || null,
     meetingDay,
     meetingTime,
   });
@@ -236,13 +289,16 @@ export async function updateClassForTeacher(
     sectionId = Number(section.id);
   }
   const resolvedClassName = (input.className ?? input.subjectName ?? cls.name)?.toString().slice(0, 120) ?? null;
-  const meetingDay = (input.meetingDay ?? cls.meetingDay)?.toString().slice(0, 20) ?? null;
+  const meetingDaySource = input.meetingDay !== undefined ? input.meetingDay : cls.meetingDay;
+  const meetingDayValue = serializeMeetingDays(meetingDaySource);
+  const meetingDay = meetingDayValue ? meetingDayValue.slice(0, 20) : null;
   const meetingTime = (input.meetingTime ?? cls.meetingTime)?.toString().slice(0, 20) ?? null;
 
   await cls.update({
     subjectId,
     sectionId,
     gradeLevel: input.gradeLevel ?? cls.gradeLevel,
+    buildingName: input.buildingName !== undefined ? input.buildingName?.trim() || null : cls.buildingName,
     name: resolvedClassName,
     meetingDay,
     meetingTime,
@@ -251,9 +307,18 @@ export async function updateClassForTeacher(
   return cls;
 }
 
-export async function deleteClassForTeacher(userId: string, classId: string) {
+export async function deleteClassForTeacher(userId: string, classId: string, password: string) {
   const teacher = await Teacher.findOne({ where: { userId } });
   if (!teacher) return null;
+  const user = await User.findByPk(userId);
+  const normalizedPassword = String(password ?? "").trim();
+  if (!user || !user.passwordHash || !normalizedPassword) {
+    return "invalid_password";
+  }
+  const validPassword = await bcrypt.compare(normalizedPassword, user.passwordHash);
+  if (!validPassword) {
+    return "invalid_password";
+  }
   const cls = await Class.findByPk(classId);
   if (!cls || cls.teacherId !== teacher.id) return false;
   const subjectId = cls.subjectId;

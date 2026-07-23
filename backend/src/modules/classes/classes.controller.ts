@@ -4,6 +4,7 @@ import {
   deleteClassForTeacher,
   getPublishedGradesForStudent,
   getPublishedGradesForTeacher,
+  getClassFormOptionsForTeacher,
   listAttendanceForStudent,
   listAttendanceForTeacher,
   listClassesForStudent,
@@ -29,6 +30,18 @@ export async function listMyClasses(req: Request, res: Response) {
   return res.json({ ok: true, classes });
 }
 
+export async function getMyClassFormOptions(req: Request, res: Response) {
+  const userId = (req as any).user?.sub as string | undefined;
+  if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
+
+  const options = await getClassFormOptionsForTeacher(userId);
+  if (!options) {
+    return res.status(404).json({ ok: false, message: "Teacher profile not found" });
+  }
+
+  return res.json({ ok: true, ...options });
+}
+
 export async function createMyClass(req: Request, res: Response) {
   const userId = (req as any).user?.sub as string | undefined;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
@@ -49,8 +62,15 @@ export async function updateMyClass(req: Request, res: Response) {
 export async function deleteMyClass(req: Request, res: Response) {
   const userId = (req as any).user?.sub as string | undefined;
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
-  const result = await deleteClassForTeacher(userId, req.params.id);
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
+  if (!password.trim()) {
+    return res.status(400).json({ ok: false, message: "Password is required" });
+  }
+  const result = await deleteClassForTeacher(userId, req.params.id, password);
   if (result === null) return res.status(404).json({ ok: false, message: "Teacher profile not found" });
+  if (result === "invalid_password") {
+    return res.status(400).json({ ok: false, message: "Wrong password. Please try again." });
+  }
   if (result === false) return res.status(404).json({ ok: false, message: "Class not found" });
   return res.json({ ok: true });
 }

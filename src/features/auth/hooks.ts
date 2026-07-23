@@ -33,6 +33,7 @@ export function useAuth() {
         middleName?: string | null;
         birthDate?: string | null;
         gender?: string | null;
+        guardianName?: string | null;
         guardianContact?: string | null;
         sectionId?: number;
         sectionName?: string | null;

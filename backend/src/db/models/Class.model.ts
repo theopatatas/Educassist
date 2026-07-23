@@ -8,6 +8,7 @@ export class Class extends Model {
   declare subjectId: number | null;
   declare name: string | null;
   declare gradeLevel: string | null;
+  declare buildingName: string | null;
   declare meetingDay: string | null;
   declare meetingTime: string | null;
 }
@@ -51,6 +52,11 @@ Class.init(
       type: DataTypes.STRING(20),
       allowNull: true,
       field: "grade_level",
+    },
+    buildingName: {
+      type: DataTypes.STRING(120),
+      allowNull: true,
+      field: "building_name",
     },
     meetingDay: {
       type: DataTypes.STRING(20),

@@ -60,6 +60,11 @@ Exam.init({
         allowNull: true,
         field: "coverage_json",
     },
+    reviewerJson: {
+        type: sequelize_1.DataTypes.JSON,
+        allowNull: true,
+        field: "reviewer_json",
+    },
     gradingStatus: {
         type: sequelize_1.DataTypes.STRING(20),
         allowNull: false,

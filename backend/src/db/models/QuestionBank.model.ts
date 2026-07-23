@@ -7,9 +7,13 @@ export class QuestionBank extends Model {
   declare outcomeId: number | null;
   declare difficulty: number;
   declare questionText: string;
-  declare choicesJson: string | null;
+  declare choicesJson: unknown;
   declare correctAnswer: string | null;
   declare explanation: string | null;
+  declare questionType: string;
+  declare points: number;
+  declare createdAt: Date;
+  declare updatedAt: Date;
 }
 
 QuestionBank.init(
@@ -58,6 +62,17 @@ QuestionBank.init(
     explanation: {
       type: DataTypes.TEXT,
       allowNull: true,
+    },
+    questionType: {
+      type: DataTypes.STRING(40),
+      allowNull: false,
+      defaultValue: "multiple_choice",
+      field: "question_type",
+    },
+    points: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 1,
     },
   },
   {

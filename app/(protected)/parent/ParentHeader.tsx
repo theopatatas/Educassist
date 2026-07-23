@@ -13,7 +13,12 @@ type Notice = { id: number; title: string; time: string; read: boolean };
 export default function ParentHeader() {
   const router = useRouter();
   const { user, logout } = useAuth();
-  const [displayName, setDisplayName] = useState<string>(() => getLocal<string>("educassist_parent_display_name") || "");
+  const parentDisplayNameKey = useMemo(() => {
+    const identity = user?.id ? String(user.id) : user?.email || "guest";
+    return `educassist_parent_display_name_${identity}`;
+  }, [user?.email, user?.id]);
+  const [displayName, setDisplayName] = useState<string>("");
+  const [displayNameDraft, setDisplayNameDraft] = useState("");
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -21,6 +26,7 @@ export default function ParentHeader() {
   const [notifications, setNotifications] = useState<Notice[]>([]);
   const [phoneLabel, setPhoneLabel] = useState("Not provided");
   const [linkedStudentLabel, setLinkedStudentLabel] = useState("Not linked");
+  const [profileName, setProfileName] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -28,17 +34,23 @@ export default function ParentHeader() {
   const [passwordStatus, setPasswordStatus] = useState("");
 
   const fallbackDisplayName = useMemo(() => {
+    if (profileName.trim()) return profileName.trim();
     const email = user?.email || "";
     const local = email.split("@")[0]?.trim();
     if (!local) return "Parent";
     return local.charAt(0).toUpperCase() + local.slice(1);
-  }, [user?.email]);
+  }, [profileName, user?.email]);
   const activeDisplayName = displayName.trim() || fallbackDisplayName;
 
   const persistDisplayName = () => {
-    const value = displayName.trim() || fallbackDisplayName;
+    const value = displayNameDraft.trim();
     setDisplayName(value);
-    setLocal("educassist_parent_display_name", value);
+    setLocal(parentDisplayNameKey, value);
+  };
+
+  const openProfileModal = () => {
+    setDisplayNameDraft(activeDisplayName);
+    setShowProfileModal(true);
   };
 
   const initials = activeDisplayName
@@ -58,15 +70,19 @@ export default function ParentHeader() {
   };
 
   const handleChangePassword = async () => {
-    if (!currentPassword || !newPassword || !confirmPassword) {
+    const current = currentPassword.trim();
+    const next = newPassword.trim();
+    const confirm = confirmPassword.trim();
+
+    if (!current || !next || !confirm) {
       setPasswordStatus("Please fill in all password fields.");
       return;
     }
-    if (newPassword.length < 8) {
+    if (next.length < 8) {
       setPasswordStatus("New password must be at least 8 characters.");
       return;
     }
-    if (newPassword !== confirmPassword) {
+    if (next !== confirm) {
       setPasswordStatus("New password and confirm password do not match.");
       return;
     }
@@ -74,8 +90,8 @@ export default function ParentHeader() {
     setPasswordStatus("Updating password...");
     try {
       const { data } = await api.patch("/api/auth/change-password", {
-        currentPassword,
-        newPassword,
+        currentPassword: current,
+        newPassword: next,
       });
       setPasswordStatus(data?.message || "Password updated successfully.");
       setCurrentPassword("");
@@ -88,15 +104,23 @@ export default function ParentHeader() {
   };
 
   useEffect(() => {
+    const savedDisplayName = getLocal<string>(parentDisplayNameKey) || "";
+    setDisplayName(savedDisplayName);
+  }, [parentDisplayNameKey]);
+
+  useEffect(() => {
     let active = true;
     api
       .get("/api/parents/me")
       .then(({ data }) => {
         if (!active) return;
         const phone = data?.parent?.phone;
+        const firstName = String(data?.parent?.firstName ?? "").trim();
+        const lastName = String(data?.parent?.lastName ?? "").trim();
         const studentId = data?.parent?.studentId;
         const studentName = data?.parent?.studentName;
         setPhoneLabel(phone ? String(phone) : "Not provided");
+        setProfileName([firstName, lastName].filter(Boolean).join(" ").trim());
         if (studentName) {
           setLinkedStudentLabel(String(studentName));
         } else {
@@ -107,6 +131,7 @@ export default function ParentHeader() {
         if (active) {
           setPhoneLabel("Not provided");
           setLinkedStudentLabel("Not linked");
+          setProfileName("");
         }
       });
     return () => {
@@ -201,7 +226,7 @@ export default function ParentHeader() {
                     <div className="border-t" />
                     <button
                       onClick={() => {
-                        setShowProfileModal(true);
+                        openProfileModal();
                         setShowProfileMenu(false);
                       }}
                       className="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-slate-50"
@@ -211,6 +236,10 @@ export default function ParentHeader() {
                     <button
                       onClick={() => {
                         setShowSettingsModal(true);
+                        setPasswordStatus("");
+                        setCurrentPassword("");
+                        setNewPassword("");
+                        setConfirmPassword("");
                         setShowProfileMenu(false);
                       }}
                       className="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-slate-50"
@@ -254,9 +283,8 @@ export default function ParentHeader() {
                 <label className="text-xs font-medium text-slate-500">Display Name</label>
                 <input
                   className="mt-1 w-full rounded-xl border border-border px-4 py-2 text-sm outline-none focus:border-border focus:ring-2 focus:ring-slate-200"
-                  value={displayName || activeDisplayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  onBlur={persistDisplayName}
+                  value={displayNameDraft}
+                  onChange={(e) => setDisplayNameDraft(e.target.value)}
                 />
               </div>
               <div>

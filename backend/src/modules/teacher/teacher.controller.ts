@@ -15,6 +15,9 @@ export async function create(req: Request, res: Response) {
   if (!req.body?.employeeNumber) {
     return res.status(400).json({ ok: false, message: "Employee number is required" });
   }
+  if (!/^09\d{9}$/.test(String(req.body?.contactNumber ?? ""))) {
+    return res.status(400).json({ ok: false, message: "Contact number must be 11 digits beginning with 09" });
+  }
   const result = await createTeacher(req.body);
   if (!result.ok) return res.status(result.code).json({ ok: false, message: result.message });
   return res.status(201).json(result);
@@ -41,9 +44,22 @@ export async function me(req: Request, res: Response) {
 }
 
 export async function update(req: Request, res: Response) {
-  const teacher = await updateTeacher(req.params.id, req.body ?? {});
-  if (!teacher) return res.status(404).json({ ok: false, message: "Teacher not found" });
-  return res.json({ ok: true, teacher });
+  if (req.body?.contactNumber !== undefined && !/^09\d{9}$/.test(String(req.body.contactNumber))) {
+    return res.status(400).json({ ok: false, message: "Contact number must be 11 digits beginning with 09" });
+  }
+  if (req.body?.email !== undefined && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(req.body.email))) {
+    return res.status(400).json({ ok: false, message: "A valid email address is required" });
+  }
+  try {
+    const teacher = await updateTeacher(req.params.id, req.body ?? {});
+    if (!teacher) return res.status(404).json({ ok: false, message: "Teacher not found" });
+    return res.json({ ok: true, teacher });
+  } catch (error: any) {
+    if (error?.name === "SequelizeUniqueConstraintError") {
+      return res.status(409).json({ ok: false, message: "Email is already in use" });
+    }
+    throw error;
+  }
 }
 
 export async function remove(req: Request, res: Response) {

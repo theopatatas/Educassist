@@ -45,6 +45,11 @@ Class.init({
         allowNull: true,
         field: "grade_level",
     },
+    buildingName: {
+        type: sequelize_1.DataTypes.STRING(120),
+        allowNull: true,
+        field: "building_name",
+    },
     meetingDay: {
         type: sequelize_1.DataTypes.STRING(20),
         allowNull: true,

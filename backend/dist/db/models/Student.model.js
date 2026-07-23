@@ -26,6 +26,11 @@ Student.init({
         allowNull: false,
         unique: true,
     },
+    studentMobileNumber: {
+        type: sequelize_1.DataTypes.STRING(11),
+        allowNull: true,
+        field: "student_mobile_number",
+    },
     firstName: {
         type: sequelize_1.DataTypes.STRING(100),
         allowNull: false,
@@ -55,6 +60,21 @@ Student.init({
         allowNull: true,
         field: "guardian_contact",
     },
+    guardianName: {
+        type: sequelize_1.DataTypes.STRING(200),
+        allowNull: true,
+        field: "guardian_name",
+    },
+    motherName: {
+        type: sequelize_1.DataTypes.STRING(200),
+        allowNull: true,
+        field: "mother_name",
+    },
+    fatherName: {
+        type: sequelize_1.DataTypes.STRING(200),
+        allowNull: true,
+        field: "father_name",
+    },
     yearLevel: {
         type: sequelize_1.DataTypes.STRING(20),
         allowNull: true,
@@ -67,6 +87,26 @@ Student.init({
         references: { model: "sections", key: "id" },
         onDelete: "SET NULL",
         onUpdate: "CASCADE",
+    },
+    previousGradeLevel: {
+        type: sequelize_1.DataTypes.STRING(20),
+        allowNull: true,
+        field: "previous_grade_level",
+    },
+    promotedAt: {
+        type: sequelize_1.DataTypes.DATE,
+        allowNull: true,
+        field: "promoted_at",
+    },
+    graduatedAt: {
+        type: sequelize_1.DataTypes.DATE,
+        allowNull: true,
+        field: "graduated_at",
+    },
+    archivedAt: {
+        type: sequelize_1.DataTypes.DATE,
+        allowNull: true,
+        field: "archived_at",
     },
 }, {
     sequelize: db_1.sequelize,

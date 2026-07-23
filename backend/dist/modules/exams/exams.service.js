@@ -4,6 +4,7 @@ exports.listExamsForTeacher = listExamsForTeacher;
 exports.listExamsForStudent = listExamsForStudent;
 exports.createExamForTeacher = createExamForTeacher;
 exports.updateExamForTeacher = updateExamForTeacher;
+exports.deleteExamForTeacher = deleteExamForTeacher;
 const Class_model_1 = require("../../db/models/Class.model");
 const Exam_model_1 = require("../../db/models/Exam.model");
 const Section_model_1 = require("../../db/models/Section.model");
@@ -44,7 +45,24 @@ function parseCoverage(input) {
     }
     return [];
 }
-async function listExamsForTeacher(userId) {
+function isPastExamSchedule(date, startTime) {
+    if (!date)
+        return false;
+    const day = new Date(date);
+    if (Number.isNaN(day.getTime()))
+        return true;
+    if (startTime?.trim()) {
+        const scheduled = new Date(`${date}T${startTime.trim()}:00`);
+        if (Number.isNaN(scheduled.getTime()))
+            return true;
+        return scheduled.getTime() < Date.now();
+    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    day.setHours(0, 0, 0, 0);
+    return day.getTime() < today.getTime();
+}
+async function listExamsForTeacher(userId, filter) {
     const teacher = await Teacher_model_1.Teacher.findOne({ where: { userId } });
     if (!teacher)
         return null;
@@ -66,7 +84,10 @@ async function listExamsForTeacher(userId) {
         const key = enrollmentKey(s.sectionId, s.yearLevel);
         studentCountMap.set(key, (studentCountMap.get(key) ?? 0) + 1);
     }
-    return exams.map((e) => {
+    const sectionFilter = normalizeText(filter?.section);
+    const gradeFilter = normalizeText(filter?.gradeLevel);
+    return exams
+        .map((e) => {
         const cls = e.classId ? classMap.get(Number(e.classId)) : null;
         const subjectName = cls?.subjectId ? subjectMap.get(Number(cls.subjectId)) ?? null : null;
         const sectionName = cls?.sectionId ? sectionMap.get(Number(cls.sectionId)) ?? null : null;
@@ -75,11 +96,21 @@ async function listExamsForTeacher(userId) {
             ...e.toJSON(),
             subjectName,
             sectionName,
+            gradeLevel: cls?.gradeLevel ?? null,
             color: colorForSubject(subjectName),
             coverage: parseCoverage(e.coverageJson),
             students: total,
             submissions: { submitted: 0, total },
         };
+    })
+        .filter((row) => {
+        const sectionOk = !sectionFilter ||
+            sectionFilter === "all sections" ||
+            normalizeText(row.sectionName) === sectionFilter;
+        const gradeOk = !gradeFilter ||
+            gradeFilter === "all grade levels" ||
+            normalizeText(classMap.get(Number(row.classId))?.gradeLevel) === gradeFilter;
+        return sectionOk && gradeOk;
     });
 }
 async function listExamsForStudent(userId) {
@@ -112,6 +143,8 @@ async function listExamsForStudent(userId) {
             ...e.toJSON(),
             subjectName,
             sectionName,
+            gradeLevel: cls?.gradeLevel ?? null,
+            buildingName: cls?.buildingName ?? null,
             teacherName,
             color: colorForSubject(subjectName),
             coverage: parseCoverage(e.coverageJson),
@@ -124,6 +157,8 @@ async function createExamForTeacher(userId, input) {
         return null;
     if (!input.classId)
         return false;
+    if (isPastExamSchedule(input.date, input.startTime))
+        return "past_date";
     const cls = await Class_model_1.Class.findByPk(input.classId);
     if (!cls || cls.teacherId !== teacher.id)
         return false;
@@ -149,6 +184,10 @@ async function updateExamForTeacher(userId, examId, input) {
     const exam = await Exam_model_1.Exam.findByPk(examId);
     if (!exam || exam.teacherId !== teacher.id)
         return false;
+    const nextDate = input.date ?? exam.examDate;
+    const nextStartTime = input.startTime !== undefined ? input.startTime : exam.startTime;
+    if (isPastExamSchedule(nextDate, nextStartTime))
+        return "past_date";
     await exam.update({
         title: input.title?.trim() ? input.title.trim().slice(0, 180) : exam.title,
         examDate: input.date ?? exam.examDate,
@@ -161,4 +200,14 @@ async function updateExamForTeacher(userId, examId, input) {
         publishResults: typeof input.publishResults === "boolean" ? input.publishResults : exam.publishResults,
     });
     return exam;
+}
+async function deleteExamForTeacher(userId, examId) {
+    const teacher = await Teacher_model_1.Teacher.findOne({ where: { userId } });
+    if (!teacher)
+        return null;
+    const exam = await Exam_model_1.Exam.findByPk(examId);
+    if (!exam || exam.teacherId !== teacher.id)
+        return false;
+    await exam.destroy();
+    return true;
 }

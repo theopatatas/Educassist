@@ -5,6 +5,7 @@ import {
   listAssignmentsForStudent,
   listAssignmentsForTeacher,
   submitAssignmentForStudent,
+  updateAssignmentForTeacher,
 } from "./assignments.service";
 
 export async function listMyAssignments(req: Request, res: Response) {
@@ -34,8 +35,20 @@ export async function createMyAssignment(req: Request, res: Response) {
 
   const assignment = await createAssignmentForTeacher(userId, req.body ?? {});
   if (assignment === null) return res.status(404).json({ ok: false, message: "Teacher profile not found" });
+  if (assignment === "past_date") return res.status(400).json({ ok: false, message: "You cannot create an assignment with a past date." });
   if (assignment === false) return res.status(400).json({ ok: false, message: "Invalid class or payload" });
   return res.status(201).json({ ok: true, assignment });
+}
+
+export async function updateMyAssignment(req: Request, res: Response) {
+  const userId = (req as Request & { user?: { sub?: string } }).user?.sub;
+  if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
+
+  const assignment = await updateAssignmentForTeacher(userId, req.params.id, req.body ?? {});
+  if (assignment === null) return res.status(404).json({ ok: false, message: "Teacher profile not found" });
+  if (assignment === "past_date") return res.status(400).json({ ok: false, message: "You cannot create an assignment with a past date." });
+  if (assignment === false) return res.status(404).json({ ok: false, message: "Assignment not found" });
+  return res.json({ ok: true, assignment });
 }
 
 export async function submitMyAssignment(req: Request, res: Response) {
@@ -44,6 +57,7 @@ export async function submitMyAssignment(req: Request, res: Response) {
 
   const result = await submitAssignmentForStudent(userId, req.params.id);
   if (result === null) return res.status(404).json({ ok: false, message: "Student profile not found" });
+  if (result === "closed") return res.status(400).json({ ok: false, message: "This assignment is already closed." });
   if (result === false) return res.status(400).json({ ok: false, message: "Assignment not found for this student" });
   return res.json({ ok: true, submission: result });
 }

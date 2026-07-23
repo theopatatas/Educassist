@@ -16,6 +16,14 @@ export type CreateAssignmentInput = {
   status?: AssignmentStatus;
 };
 
+export type UpdateAssignmentInput = {
+  classId?: number;
+  title?: string;
+  dueDate?: string;
+  description?: string;
+  status?: AssignmentStatus;
+};
+
 function normalizeText(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
 }
@@ -32,6 +40,44 @@ function colorForSubject(subjectName?: string | null) {
   return "blue";
 }
 
+function getDueDateTimestamp(dueDate?: string | null) {
+  if (!dueDate) return null;
+  const parsed = new Date(dueDate);
+  const time = parsed.getTime();
+  return Number.isNaN(time) ? null : time;
+}
+
+function isAssignmentExpired(dueDate?: string | null) {
+  const dueTime = getDueDateTimestamp(dueDate);
+  if (dueTime === null) return false;
+  return Date.now() >= dueTime;
+}
+
+function isPastAssignmentDate(dueDate?: string) {
+  if (!dueDate) return false;
+  const selected = new Date(dueDate);
+  if (Number.isNaN(selected.getTime())) return true;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  selected.setHours(0, 0, 0, 0);
+  return selected.getTime() < today.getTime();
+}
+
+async function autoCloseExpiredAssignments(assignments: Assignment[]) {
+  const expiredAssignments = assignments.filter(
+    (assignment) => assignment.status !== "Closed" && isAssignmentExpired(assignment.dueDate)
+  );
+
+  if (expiredAssignments.length === 0) return;
+
+  await Promise.all(
+    expiredAssignments.map(async (assignment) => {
+      assignment.status = "Closed";
+      await assignment.save();
+    })
+  );
+}
+
 export async function listAssignmentsForTeacher(
   userId: string,
   filter?: { section?: string; gradeLevel?: string }
@@ -44,6 +90,7 @@ export async function listAssignmentsForTeacher(
     order: [["createdAt", "DESC"]],
   });
   if (assignments.length === 0) return [];
+  await autoCloseExpiredAssignments(assignments);
 
   const classIds = assignments.map((a) => Number(a.classId)).filter(Boolean);
   const [classes, subjects, sections, students] = await Promise.all([
@@ -82,6 +129,7 @@ export async function listAssignmentsForTeacher(
         ...a.toJSON(),
         subjectName,
         sectionName,
+        gradeLevel: cls?.gradeLevel ?? null,
         color: colorForSubject(subjectName),
         submissions: { submitted, total },
       };
@@ -117,6 +165,7 @@ export async function listAssignmentsForStudent(userId: string) {
     Section.findAll(),
     Teacher.findAll(),
   ]);
+  await autoCloseExpiredAssignments(assignments);
   const assignmentIds = assignments.map((a) => Number(a.id));
   const submissionRows =
     assignmentIds.length > 0
@@ -140,6 +189,7 @@ export async function listAssignmentsForStudent(userId: string) {
       ...a.toJSON(),
       subjectName,
       sectionName,
+      gradeLevel: cls?.gradeLevel ?? null,
       teacherName,
       color: colorForSubject(subjectName),
       mySubmitted: !!mySubmission?.submittedAt,
@@ -151,6 +201,7 @@ export async function createAssignmentForTeacher(userId: string, input: CreateAs
   const teacher = await Teacher.findOne({ where: { userId } });
   if (!teacher) return null;
   if (!input.classId || !input.title?.trim() || !input.dueDate) return false;
+  if (isPastAssignmentDate(input.dueDate)) return "past_date";
 
   const cls = await Class.findByPk(input.classId);
   if (!cls || cls.teacherId !== teacher.id) return false;
@@ -167,12 +218,42 @@ export async function createAssignmentForTeacher(userId: string, input: CreateAs
   return assignment;
 }
 
+export async function updateAssignmentForTeacher(userId: string, assignmentId: string, input: UpdateAssignmentInput) {
+  const teacher = await Teacher.findOne({ where: { userId } });
+  if (!teacher) return null;
+
+  const assignment = await Assignment.findByPk(assignmentId);
+  if (!assignment || assignment.teacherId !== teacher.id) return false;
+
+  const nextClassId = input.classId ?? Number(assignment.classId);
+  if (!nextClassId) return false;
+  if (input.dueDate && isPastAssignmentDate(input.dueDate)) return "past_date";
+
+  const cls = await Class.findByPk(nextClassId);
+  if (!cls || cls.teacherId !== teacher.id) return false;
+
+  await assignment.update({
+    classId: cls.id,
+    title: input.title?.trim() ? input.title.trim().slice(0, 180) : assignment.title,
+    dueDate: input.dueDate ?? assignment.dueDate,
+    description: input.description !== undefined ? input.description.trim() || null : assignment.description,
+    status: input.status ?? assignment.status,
+  });
+
+  return assignment;
+}
+
 export async function submitAssignmentForStudent(userId: string, assignmentId: string) {
   const student = await Student.findOne({ where: { userId } });
   if (!student) return null;
 
   const assignment = await Assignment.findByPk(assignmentId);
   if (!assignment || !assignment.classId) return false;
+  if (assignment.status !== "Closed" && isAssignmentExpired(assignment.dueDate)) {
+    assignment.status = "Closed";
+    await assignment.save();
+  }
+  if (assignment.status === "Closed") return "closed";
 
   const cls = await Class.findByPk(assignment.classId);
   if (!cls || !student.sectionId || !student.yearLevel || !cls.sectionId || !cls.gradeLevel) return false;

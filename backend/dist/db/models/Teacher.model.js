@@ -31,6 +31,25 @@ Teacher.init({
         allowNull: false,
         field: "last_name",
     },
+    middleName: {
+        type: sequelize_1.DataTypes.STRING(100),
+        allowNull: true,
+        field: "middle_name",
+    },
+    contactNumber: {
+        type: sequelize_1.DataTypes.STRING(50),
+        allowNull: true,
+        field: "contact_number",
+    },
+    gender: {
+        type: sequelize_1.DataTypes.STRING(20),
+        allowNull: true,
+    },
+    archivedAt: {
+        type: sequelize_1.DataTypes.DATE,
+        allowNull: true,
+        field: "archived_at",
+    },
     employeeNumber: {
         type: sequelize_1.DataTypes.STRING(50),
         allowNull: true,

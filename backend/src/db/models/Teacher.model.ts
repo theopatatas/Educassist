@@ -6,6 +6,10 @@ export class Teacher extends Model {
   declare userId: number;
   declare firstName: string;
   declare lastName: string;
+  declare middleName: string | null;
+  declare contactNumber: string | null;
+  declare gender: string | null;
+  declare archivedAt: Date | null;
   declare employeeNumber: string | null;
   declare sectionId: number | null;
   declare gradeLevel: string | null;
@@ -36,6 +40,25 @@ Teacher.init(
       type: DataTypes.STRING(100),
       allowNull: false,
       field: "last_name",
+    },
+    middleName: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+      field: "middle_name",
+    },
+    contactNumber: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      field: "contact_number",
+    },
+    gender: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+    },
+    archivedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "archived_at",
     },
     employeeNumber: {
       type: DataTypes.STRING(50),

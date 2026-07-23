@@ -43,6 +43,12 @@ QuizAttempt.init({
         allowNull: false,
         defaultValue: 0,
     },
+    penaltyPoints: {
+        type: sequelize_1.DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+        field: "penalty_points",
+    },
 }, {
     sequelize: db_1.sequelize,
     tableName: "quiz_attempts",

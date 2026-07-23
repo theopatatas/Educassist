@@ -3,9 +3,15 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/src/features/auth/hooks";
+import SessionIdleManager from "@/src/features/auth/SessionIdleManager";
 import StudentHeader from "./StudentHeader";
+import AICompanion from "./_components/AICompanion";
 
-export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
+export default function ProtectedLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const router = useRouter();
   const { user, hydrated } = useAuth();
 
@@ -21,6 +27,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900">
+      <SessionIdleManager />
       {showBaseHeader ? (
         <>
           <StudentHeader />
@@ -29,6 +36,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
       ) : (
         <main>{children}</main>
       )}
+      <AICompanion />
     </div>
   );
 }

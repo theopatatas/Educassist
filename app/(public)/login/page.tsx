@@ -11,7 +11,7 @@ import { roleHome } from "@/src/features/auth/rbac";
 
 const schema = z.object({
   email: z.string().min(1, "Email is required"),
-  password: z.string().min(8),
+  password: z.string().min(1, " ").min(8, "Password must be at least 8 characters"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -69,7 +69,12 @@ export default function LoginPage() {
             {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email.message}</p>}
           </div>
           <div>
-            <label className="text-sm font-medium">Password</label>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">Password</label>
+              <a href="/forgot-password" className="text-xs font-medium text-zinc-700 hover:underline">
+                Forgot password?
+              </a>
+            </div>
             <div className="mt-2 flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2">
               <input
                 type={showPassword ? "text" : "password"}
@@ -85,9 +90,9 @@ export default function LoginPage() {
                 {showPassword ? "Hide" : "Show"}
               </button>
             </div>
-            {errors.password && (
+            {errors.password?.message?.trim() ? (
               <p className="mt-1 text-xs text-red-600">{errors.password.message}</p>
-            )}
+            ) : null}
           </div>
           <button
             type="submit"

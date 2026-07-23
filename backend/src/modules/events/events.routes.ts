@@ -1,0 +1,15 @@
+import { Router } from "express";
+import { requireAuth } from "../../middleware/auth.middleware";
+import { requireRole } from "../../middleware/role.middleware";
+import { create, dashboard, list, notifications, readAllNotifications, readNotification, remove, update } from "./events.controller";
+const router = Router();
+router.use(requireAuth, requireRole("admin", "managed_admin"));
+router.get("/dashboard", dashboard);
+router.get("/notifications", notifications);
+router.patch("/notifications/read-all", readAllNotifications);
+router.patch("/notifications/:id/read", readNotification);
+router.get("/", list);
+router.post("/", create);
+router.patch("/:id", update);
+router.delete("/:id", remove);
+export default router;

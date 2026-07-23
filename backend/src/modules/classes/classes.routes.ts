@@ -3,6 +3,7 @@ import { requireAuth } from "../../middleware/auth.middleware";
 import { requireRole } from "../../middleware/role.middleware";
 import {
   getMyGrades,
+  getMyClassFormOptions,
   getMyAttendance,
   publishMyGrades,
   createMyClass,
@@ -16,6 +17,7 @@ import {
 const router = Router();
 
 router.get("/me", requireAuth, requireRole("teacher", "student"), listMyClasses);
+router.get("/meta/me", requireAuth, requireRole("teacher"), getMyClassFormOptions);
 router.get("/grades/me", requireAuth, requireRole("teacher", "student"), getMyGrades);
 router.post("/grades/me", requireAuth, requireRole("teacher"), publishMyGrades);
 router.get("/attendance/me", requireAuth, requireRole("teacher", "student"), getMyAttendance);

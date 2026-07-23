@@ -5,6 +5,7 @@ export class Subject extends Model {
   declare id: number;
   declare name: string;
   declare code: string | null;
+  declare createdByAdmin: boolean;
 }
 
 Subject.init(
@@ -22,11 +23,17 @@ Subject.init(
       type: DataTypes.STRING(40),
       allowNull: true,
     },
+    createdByAdmin: {
+      type: DataTypes.TINYINT,
+      allowNull: false,
+      defaultValue: 0,
+      field: "created_by_admin",
+    },
   },
   {
     sequelize,
     tableName: "subjects",
     timestamps: true,
     underscored: true,
-  }
+  },
 );

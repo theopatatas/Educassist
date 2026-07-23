@@ -12,5 +12,6 @@ async function getOverview() {
         Teacher_model_1.Teacher.count(),
         Parent_model_1.Parent.count(),
     ]);
-    return { users, students, teachers, parents };
+    const enrolledStudents = students;
+    return { users, students, teachers, parents, enrolledStudents };
 }

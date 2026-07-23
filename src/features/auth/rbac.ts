@@ -6,8 +6,10 @@ export function canAccess(required: Role, actual?: Role | null) {
 
 export function roleHome(role: Role) {
   switch (role) {
-    case "admin":
+    case "super_admin":
       return "/admin";
+    case "admin":
+      return "/staff-admin";
     case "teacher":
       return "/teacher";
     case "parent":
