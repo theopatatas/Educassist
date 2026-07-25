@@ -257,15 +257,15 @@ export default function TeacherReportsPage() {
   const exportLabel = useMemo(() => `${section} • ${grade} • ${subject} • ${term}`, [grade, section, subject, term]);
 
   return (
-    <div className="mx-auto max-w-7xl p-6">
+    <div className="mx-auto max-w-7xl p-4 sm:p-6">
       <div className="mb-8 flex flex-col items-start justify-between gap-4 lg:flex-row lg:items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Reports & Analytics (Teacher)</h1>
           <p className="text-gray-500">Monitor class performance, identify at-risk learners, and export reports.</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 rounded-xl border bg-white px-3 py-2">
+        <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto">
+          <div className="flex w-full flex-wrap items-center gap-2 rounded-xl border bg-white px-3 py-2 lg:w-auto lg:flex-nowrap">
             <Filter className="h-4 w-4 text-gray-500" />
             <select value={section} onChange={(e) => setSection(e.target.value as Section)} className="bg-transparent text-sm outline-none">
               {sectionOptions.map((s) => (
@@ -275,7 +275,7 @@ export default function TeacherReportsPage() {
               ))}
             </select>
 
-            <span className="text-gray-300">|</span>
+            <span className="hidden text-gray-300 lg:inline">|</span>
             <select value={grade} onChange={(e) => setGrade(e.target.value as Grade)} className="bg-transparent text-sm outline-none">
               {gradeOptions.map((g) => (
                 <option key={g} value={g}>
@@ -284,7 +284,7 @@ export default function TeacherReportsPage() {
               ))}
             </select>
 
-            <span className="text-gray-300">|</span>
+            <span className="hidden text-gray-300 lg:inline">|</span>
             <select value={subject} onChange={(e) => setSubject(e.target.value as Subject)} className="bg-transparent text-sm outline-none">
               {subjectOptions.map((s) => (
                 <option key={s} value={s}>
@@ -293,7 +293,7 @@ export default function TeacherReportsPage() {
               ))}
             </select>
 
-            <span className="text-gray-300">|</span>
+            <span className="hidden text-gray-300 lg:inline">|</span>
 
             <select value={term} onChange={(e) => setTerm(e.target.value as Term)} className="bg-transparent text-sm outline-none">
               {TERMS.map((t) => (
@@ -304,11 +304,11 @@ export default function TeacherReportsPage() {
             </select>
           </div>
 
-          <div className="relative">
+          <div className="relative w-full sm:w-auto">
             <button
               type="button"
               onClick={() => setShowExportMenu((v) => !v)}
-              className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 font-medium text-gray-600 transition-colors hover:bg-gray-50"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 font-medium text-gray-600 transition-colors hover:bg-gray-50 sm:w-auto"
             >
               <Download className="h-4 w-4" />
               Export

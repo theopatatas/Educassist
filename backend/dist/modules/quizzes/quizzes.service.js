@@ -23,6 +23,10 @@ const Section_model_1 = require("../../db/models/Section.model");
 const Student_model_1 = require("../../db/models/Student.model");
 const Subject_model_1 = require("../../db/models/Subject.model");
 const Teacher_model_1 = require("../../db/models/Teacher.model");
+const Grade_model_1 = require("../../db/models/Grade.model");
+const GradeItem_model_1 = require("../../db/models/GradeItem.model");
+const sequelize_1 = require("sequelize");
+const auth_service_1 = require("../auth/auth.service");
 const QUIZ_LEAVE_PENALTY_POINTS = 1;
 function normalizeText(value) {
     return String(value ?? "")
@@ -49,6 +53,15 @@ function parseSettings(settingsJson) {
         dueDate: parsed?.dueDate ?? null,
         questions: Number(parsed?.questions ?? 0),
         publishResults: Boolean(parsed?.publishResults ?? false),
+        description: String(parsed?.description ?? ""),
+        availableFrom: parsed?.availableFrom ?? null,
+        published: parsed?.published !== false,
+        attemptsAllowed: Math.max(1, Number(parsed?.attemptsAllowed ?? 1)),
+        randomizeQuestions: Boolean(parsed?.randomizeQuestions),
+        randomizeChoices: Boolean(parsed?.randomizeChoices),
+        passingScore: Math.min(100, Math.max(0, Number(parsed?.passingScore ?? 75))),
+        visibility: String(parsed?.visibility ?? "class"),
+        source: String(parsed?.source ?? "manual"),
     };
 }
 function colorForSubject(subjectName) {
@@ -139,7 +152,7 @@ function normalizeAnswerForCompare(value, type) {
     return normalizeText(value);
 }
 function answersMatch(question, studentAnswer) {
-    if (question.type === "short_answer") {
+    if (question.type === "short_answer" || question.type === "essay") {
         return null;
     }
     const expected = normalizeAnswerForCompare(question.correctAnswer, question.type);
@@ -158,6 +171,16 @@ function timeTakenLabel(startedAt, completedAt) {
     if (!started || !ended || ended <= started)
         return "-";
     return `${Math.max(1, Math.round((ended - started) / (1000 * 60)))} mins`;
+}
+function shuffled(items, seed) {
+    const result = [...items];
+    let state = Math.abs(seed) || 1;
+    for (let index = result.length - 1; index > 0; index -= 1) {
+        state = (state * 9301 + 49297) % 233280;
+        const target = Math.floor((state / 233280) * (index + 1));
+        [result[index], result[target]] = [result[target], result[index]];
+    }
+    return result;
 }
 async function getTeacherByUserId(userId) {
     return Teacher_model_1.Teacher.findOne({ where: { userId } });
@@ -200,6 +223,7 @@ async function getQuizQuestionsWithBank(quizId) {
             options: parseOptions(question.choicesJson),
             correctAnswer: parseStoredCorrectAnswer(question.correctAnswer),
             points: safePoints(question.points),
+            explanation: question.explanation ?? "",
         };
     })
         .filter(Boolean);
@@ -223,6 +247,14 @@ async function ensureStudentQuizAccess(userId, quizId) {
     const quiz = await Quiz_model_1.Quiz.findByPk(quizId);
     if (!quiz || !quiz.classId)
         return false;
+    const settings = parseSettings(quiz.settingsJson);
+    if (!settings.published || settings.visibility === "private")
+        return false;
+    if (settings.availableFrom) {
+        const availableAt = new Date(settings.availableFrom).getTime();
+        if (!Number.isNaN(availableAt) && availableAt > Date.now())
+            return false;
+    }
     const cls = await Class_model_1.Class.findByPk(quiz.classId);
     if (!cls ||
         !student.sectionId ||
@@ -318,6 +350,7 @@ async function listQuizzesForTeacher(userId) {
             dueDate: settings.dueDate,
             questions: settings.questions,
             publishResults: settings.publishResults,
+            settings,
             completed: summary.completed,
             total: summary.total,
             avgScore: summary.avgScore,
@@ -378,7 +411,16 @@ async function listQuizzesForStudent(userId) {
         const attemptId = Number(row.attemptId);
         correctCountByAttemptId.set(attemptId, (correctCountByAttemptId.get(attemptId) ?? 0) + 1);
     }
-    return quizzes.map((q) => {
+    const visibleQuizzes = quizzes.filter((quiz) => {
+        const settings = parseSettings(quiz.settingsJson);
+        if (!settings.published || settings.visibility === "private")
+            return false;
+        if (!settings.availableFrom)
+            return true;
+        const availableAt = new Date(settings.availableFrom).getTime();
+        return Number.isNaN(availableAt) || availableAt <= Date.now();
+    });
+    return visibleQuizzes.map((q) => {
         const cls = q.classId ? classMap.get(Number(q.classId)) : null;
         const subjectName = cls?.subjectId
             ? (metadata.subjectMap.get(Number(cls.subjectId)) ?? null)
@@ -418,6 +460,7 @@ async function listQuizzesForStudent(userId) {
             myScore,
             myCorrectAnswers,
             classAvg,
+            settings,
         };
     });
 }
@@ -435,12 +478,24 @@ async function createQuizForTeacher(userId, input) {
     return Quiz_model_1.Quiz.create({
         classId: cls.id,
         title: input.title.trim().slice(0, 160),
-        timeLimit: input.timeLimitMinutes ?? null,
+        timeLimit: input.timeLimitMinutes == null ||
+            !Number.isFinite(Number(input.timeLimitMinutes))
+            ? null
+            : Math.max(1, Math.round(Number(input.timeLimitMinutes))),
         attemptLimit: 1,
         settingsJson: {
             dueDate: input.dueDate ?? null,
             questions: Number(input.questions ?? 0),
             publishResults: Boolean(input.publishResults ?? false),
+            description: String(input.description ?? "").trim(),
+            availableFrom: input.availableFrom ?? null,
+            published: input.published !== false,
+            attemptsAllowed: Math.max(1, Number(input.attemptsAllowed ?? 1)),
+            randomizeQuestions: Boolean(input.randomizeQuestions),
+            randomizeChoices: Boolean(input.randomizeChoices),
+            passingScore: Math.min(100, Math.max(0, Number(input.passingScore ?? 75))),
+            visibility: String(input.visibility ?? "class"),
+            source: String(input.source ?? "manual"),
         },
     });
 }
@@ -450,6 +505,11 @@ async function updateQuizForTeacher(userId, quizId, input) {
         return access;
     const { quiz, cls } = access;
     const previousSettings = parseSettings(quiz.settingsJson);
+    if (previousSettings.publishResults &&
+        input.publishResults === false &&
+        !(await (0, auth_service_1.verifyUserPassword)(userId, String(input.password ?? "")))) {
+        return "invalid_password";
+    }
     const nextDueDate = input.dueDate !== undefined ? input.dueDate : previousSettings.dueDate;
     if (isPastQuizDate(nextDueDate))
         return "past_date";
@@ -463,11 +523,25 @@ async function updateQuizForTeacher(userId, quizId, input) {
     await quiz.update({
         classId,
         title: input.title?.trim() ? input.title.trim().slice(0, 160) : quiz.title,
-        timeLimit: input.timeLimitMinutes ?? quiz.timeLimit,
+        timeLimit: input.timeLimitMinutes !== undefined
+            ? input.timeLimitMinutes == null ||
+                !Number.isFinite(Number(input.timeLimitMinutes))
+                ? null
+                : Math.max(1, Math.round(Number(input.timeLimitMinutes)))
+            : quiz.timeLimit,
         settingsJson: {
             dueDate: input.dueDate ?? previousSettings.dueDate,
             questions: Number(input.questions ?? previousSettings.questions ?? 0),
             publishResults: Boolean(input.publishResults ?? previousSettings.publishResults ?? false),
+            description: input.description ?? previousSettings.description,
+            availableFrom: input.availableFrom ?? previousSettings.availableFrom,
+            published: input.published ?? previousSettings.published,
+            attemptsAllowed: input.attemptsAllowed ?? previousSettings.attemptsAllowed,
+            randomizeQuestions: input.randomizeQuestions ?? previousSettings.randomizeQuestions,
+            randomizeChoices: input.randomizeChoices ?? previousSettings.randomizeChoices,
+            passingScore: input.passingScore ?? previousSettings.passingScore,
+            visibility: input.visibility ?? previousSettings.visibility,
+            source: input.source ?? previousSettings.source,
         },
     });
     return quiz;
@@ -496,6 +570,7 @@ async function getQuizDetailForTeacher(userId, quizId) {
             ? (metadata.subjectMap.get(Number(cls.subjectId)) ?? "Subject")
             : "Subject",
         publishResults: settings.publishResults,
+        settings,
         summary,
         questions,
     };
@@ -525,6 +600,12 @@ async function getQuizDetailForStudent(userId, quizId) {
     for (const row of answerRows) {
         answerMap.set(Number(row.questionId), row);
     }
+    const presentedQuestions = settings.randomizeQuestions
+        ? shuffled(questions, Number(student.id) + Number(quiz.id))
+        : questions;
+    const completedAttempts = await QuizAttempt_model_1.QuizAttempt.count({
+        where: { quizId: quiz.id, studentId: student.id, completedAt: { [sequelize_1.Op.ne]: null } },
+    });
     return {
         id: Number(quiz.id),
         title: quiz.title,
@@ -538,6 +619,7 @@ async function getQuizDetailForStudent(userId, quizId) {
             ? (metadata.subjectMap.get(Number(cls.subjectId)) ?? "Subject")
             : "Subject",
         publishResults: settings.publishResults,
+        settings,
         myAttempt: attempt?.completedAt
             ? "Submitted"
             : attempt?.startedAt
@@ -546,12 +628,17 @@ async function getQuizDetailForStudent(userId, quizId) {
         myScore: Number(attempt?.score ?? 0),
         startedAt: attempt?.startedAt ?? null,
         completedAt: attempt?.completedAt ?? null,
+        canRetake: Boolean(attempt?.completedAt) &&
+            completedAttempts < settings.attemptsAllowed &&
+            !settings.publishResults,
         penaltyPoints: Number(attempt?.penaltyPoints ?? 0),
-        questions: questions.map((question) => ({
+        questions: presentedQuestions.map((question) => ({
             id: question.id,
             type: question.type,
             text: question.text,
-            options: question.options,
+            options: settings.randomizeChoices
+                ? shuffled(question.options, Number(student.id) + Number(question.id))
+                : question.options,
             points: question.points,
             answer: parseStoredCorrectAnswer(answerMap.get(question.id)?.answer ?? null),
             isCorrect: answerMap.get(question.id)?.isCorrect ?? null,
@@ -588,6 +675,7 @@ async function saveQuizQuestionsForTeacher(userId, quizId, questions) {
             questionText: text,
             choicesJson: options,
             correctAnswer: serializeCorrectAnswer(item.correctAnswer, type),
+            explanation: String(item.explanation ?? "").trim(),
             questionType: type,
             points: safePoints(item.points),
         };
@@ -621,9 +709,30 @@ async function startQuizForStudent(userId, quizId) {
     const settings = parseSettings(quiz.settingsJson);
     const existing = await QuizAttempt_model_1.QuizAttempt.findOne({
         where: { quizId: quiz.id, studentId: student.id },
+        order: [["updatedAt", "DESC"]],
     });
     if (settings.publishResults && !existing?.completedAt) {
         return "closed";
+    }
+    if (existing?.completedAt) {
+        const completedAttempts = await QuizAttempt_model_1.QuizAttempt.count({
+            where: {
+                quizId: quiz.id,
+                studentId: student.id,
+                completedAt: { [sequelize_1.Op.ne]: null },
+            },
+        });
+        if (completedAttempts < settings.attemptsAllowed) {
+            return QuizAttempt_model_1.QuizAttempt.create({
+                quizId: Number(quiz.id),
+                studentId: Number(student.id),
+                startedAt: new Date(),
+                completedAt: null,
+                score: 0,
+                penaltyPoints: 0,
+            });
+        }
+        return existing;
     }
     if (existing) {
         if (!existing.startedAt) {
@@ -655,6 +764,7 @@ async function submitQuizForStudent(userId, quizId, answers) {
     }
     let attempt = await QuizAttempt_model_1.QuizAttempt.findOne({
         where: { quizId: quiz.id, studentId: student.id },
+        order: [["updatedAt", "DESC"]],
     });
     if (settings.publishResults && !attempt?.completedAt) {
         return "closed";
@@ -670,7 +780,7 @@ async function submitQuizForStudent(userId, quizId, answers) {
         });
     }
     const totalAutoGradedPoints = questions
-        .filter((question) => question.type !== "short_answer")
+        .filter((question) => question.type !== "short_answer" && question.type !== "essay")
         .reduce((sum, question) => sum + question.points, 0);
     let earnedPoints = 0;
     let manualReviewCount = 0;
@@ -678,7 +788,7 @@ async function submitQuizForStudent(userId, quizId, answers) {
         const studentAnswer = answerMap.get(question.id);
         const isCorrect = answersMatch(question, studentAnswer);
         const questionScore = isCorrect === true ? question.points : 0;
-        if (question.type === "short_answer") {
+        if (question.type === "short_answer" || question.type === "essay") {
             manualReviewCount += 1;
         }
         else {
@@ -687,7 +797,9 @@ async function submitQuizForStudent(userId, quizId, answers) {
         const payload = {
             answer: JSON.stringify(studentAnswer ?? null),
             isCorrect,
-            score: question.type === "short_answer" ? null : questionScore,
+            score: question.type === "short_answer" || question.type === "essay"
+                ? null
+                : questionScore,
         };
         const existing = await QuizAttemptAnswer_model_1.QuizAttemptAnswer.findOne({
             where: { attemptId: attempt.id, questionId: question.id },
@@ -710,7 +822,40 @@ async function submitQuizForStudent(userId, quizId, answers) {
         startedAt: attempt.startedAt ?? new Date(),
         completedAt: new Date(),
         score: percentageScore,
+        remainingSeconds: quiz.timeLimit && attempt.startedAt
+            ? Math.max(0, Math.round((new Date(attempt.startedAt).getTime() +
+                Number(quiz.timeLimit) * 60_000 -
+                Date.now()) /
+                1000))
+            : null,
     });
+    if (manualReviewCount === 0 && quiz.classId) {
+        const [gradeItem] = await GradeItem_model_1.GradeItem.findOrCreate({
+            where: { classId: quiz.classId, name: `Quiz: ${quiz.title}` },
+            defaults: {
+                classId: Number(quiz.classId),
+                name: `Quiz: ${quiz.title}`,
+                weight: 1,
+                maxScore: 100,
+                dueDate: settings.dueDate
+                    ? String(settings.dueDate).slice(0, 10)
+                    : null,
+            },
+        });
+        const existingGrade = await Grade_model_1.Grade.findOne({
+            where: { gradeItemId: gradeItem.id, studentId: student.id },
+        });
+        if (existingGrade) {
+            await existingGrade.update({ score: percentageScore });
+        }
+        else {
+            await Grade_model_1.Grade.create({
+                gradeItemId: Number(gradeItem.id),
+                studentId: Number(student.id),
+                score: percentageScore,
+            });
+        }
+    }
     return {
         attempt,
         result: {

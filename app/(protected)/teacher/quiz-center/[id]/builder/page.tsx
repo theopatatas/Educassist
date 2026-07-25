@@ -5,7 +5,13 @@ import { useParams, useRouter } from "next/navigation";
 import { api } from "@/src/lib/http/client";
 import { ArrowLeft, CheckCircle2, Plus, Save, Trash2 } from "lucide-react";
 
-type QuestionType = "multiple_choice" | "checkbox" | "true_false" | "short_answer";
+type QuestionType =
+  | "multiple_choice"
+  | "checkbox"
+  | "true_false"
+  | "short_answer"
+  | "identification"
+  | "essay";
 
 type BuilderQuestion = {
   id?: number;
@@ -32,6 +38,8 @@ const QUESTION_TYPES: Array<{ value: QuestionType; label: string }> = [
   { value: "checkbox", label: "Checkbox" },
   { value: "true_false", label: "True / False" },
   { value: "short_answer", label: "Short Answer" },
+  { value: "identification", label: "Identification" },
+  { value: "essay", label: "Essay" },
 ];
 
 function makeBlankQuestion(type: QuestionType = "multiple_choice"): BuilderQuestion {
@@ -147,7 +155,14 @@ export default function TeacherQuizBuilderPage() {
         return {
           ...question,
           type,
-          options: type === "true_false" ? ["True", "False"] : type === "short_answer" ? [] : ["", ""],
+          options:
+            type === "true_false"
+              ? ["True", "False"]
+              : type === "short_answer" ||
+                  type === "identification" ||
+                  type === "essay"
+                ? []
+                : ["", ""],
           correctAnswer: type === "checkbox" ? [] : type === "true_false" ? true : "",
         };
       })
@@ -214,11 +229,11 @@ export default function TeacherQuizBuilderPage() {
   };
 
   if (isLoading) {
-    return <div className="mx-auto max-w-6xl p-6 text-sm text-gray-500">Loading quiz builder...</div>;
+    return <div className="mx-auto max-w-6xl p-4 text-sm text-gray-500 sm:p-6">Loading quiz builder...</div>;
   }
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
+    <div className="mx-auto max-w-6xl p-4 sm:p-6">
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <button
@@ -407,7 +422,9 @@ export default function TeacherQuizBuilderPage() {
                 </div>
               ) : null}
 
-              {question.type === "short_answer" ? (
+              {question.type === "short_answer" ||
+              question.type === "identification" ||
+              question.type === "essay" ? (
                 <div className="mt-5">
                   <label className="mb-1 block text-sm font-medium text-gray-700">Suggested answer / answer key</label>
                   <input
@@ -418,7 +435,9 @@ export default function TeacherQuizBuilderPage() {
                     placeholder="Optional answer key for manual checking"
                   />
                   <p className="mt-2 text-xs text-gray-500">
-                    Short answer questions are saved with an answer key, but they can be reviewed manually by the teacher.
+                    {question.type === "identification"
+                      ? "Identification answers are checked automatically against this answer key."
+                      : "This response is saved with an answer key and remains available for manual grading."}
                   </p>
                 </div>
               ) : null}

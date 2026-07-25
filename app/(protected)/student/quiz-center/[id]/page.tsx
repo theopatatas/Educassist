@@ -6,7 +6,13 @@ import { api } from "@/src/lib/http/client";
 import { ArrowLeft, CheckCircle2, Clock, XCircle } from "lucide-react";
 
 type AttemptStatus = "Not Started" | "In Progress" | "Submitted";
-type QuestionType = "multiple_choice" | "checkbox" | "true_false" | "short_answer";
+type QuestionType =
+  | "multiple_choice"
+  | "checkbox"
+  | "true_false"
+  | "short_answer"
+  | "identification"
+  | "essay";
 
 type StudentQuestion = {
   id: number;
@@ -33,6 +39,8 @@ type QuizDetail = {
   penaltyPoints?: number;
   startedAt?: string | null;
   completedAt?: string | null;
+  canRetake?: boolean;
+  settings?: { description?: string };
   questions: StudentQuestion[];
 };
 
@@ -164,6 +172,24 @@ export default function StudentTakeQuizPage() {
     }
   }, [answers, quiz]);
 
+  const retakeQuiz = async () => {
+    if (!quiz?.canRetake || isSubmitting) return;
+    setIsSubmitting(true);
+    setError("");
+    try {
+      await api.post(`/api/quizzes/${quiz.id}/start`);
+      const refreshed = await api.get(`/api/quizzes/${quiz.id}`);
+      setQuiz((refreshed.data?.quiz as QuizDetail) ?? null);
+      setAnswers({});
+      setResult(null);
+      autoSubmittedRef.current = false;
+    } catch {
+      setError("A new quiz attempt could not be started.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   useEffect(() => {
     if (timeLeft !== 0 || autoSubmittedRef.current) return;
     autoSubmittedRef.current = true;
@@ -252,6 +278,11 @@ export default function StudentTakeQuizPage() {
           <p className="mt-1 text-sm text-gray-500">
             {quiz?.subjectName || "Subject"} • {quiz?.className || "Class"} • {quiz?.questions.length ?? 0} questions
           </p>
+          {quiz?.settings?.description ? (
+            <p className="mt-3 max-w-3xl whitespace-pre-wrap text-sm text-gray-600">
+              {quiz.settings.description}
+            </p>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap gap-3">
@@ -295,6 +326,16 @@ export default function StudentTakeQuizPage() {
               <p className="mt-4 text-sm text-gray-600">
                 Your quiz has been checked. Review the answers below to see your results.
               </p>
+              {quiz?.canRetake ? (
+                <button
+                  type="button"
+                  onClick={() => void retakeQuiz()}
+                  disabled={isSubmitting}
+                  className="mt-4 rounded-xl bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-50"
+                >
+                  {isSubmitting ? "Starting…" : "Retake Quiz"}
+                </button>
+              ) : null}
             </div>
           </div>
         </div>
@@ -307,13 +348,13 @@ export default function StudentTakeQuizPage() {
           const correctAnswer = question.correctAnswer;
           const correctOptions = Array.isArray(correctAnswer) ? correctAnswer : [];
           const questionStatus =
-            question.type === "short_answer"
+            question.type === "short_answer" || question.type === "essay"
               ? "Pending Review"
               : question.isCorrect
               ? "Correct"
               : "Incorrect";
           const questionStatusClass =
-            question.type === "short_answer"
+            question.type === "short_answer" || question.type === "essay"
               ? "bg-amber-50 text-amber-700 border-amber-200"
               : question.isCorrect
               ? "bg-green-50 text-green-700 border-green-200"
@@ -336,7 +377,7 @@ export default function StudentTakeQuizPage() {
               {isReviewMode ? (
                 <div className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${questionStatusClass}`}>
                   <div className="flex items-center gap-2 text-sm font-semibold">
-                    {question.type === "short_answer" ? null : question.isCorrect ? (
+                    {question.type === "short_answer" || question.type === "essay" ? null : question.isCorrect ? (
                       <CheckCircle2 className="h-4 w-4" />
                     ) : (
                       <XCircle className="h-4 w-4" />
@@ -344,7 +385,7 @@ export default function StudentTakeQuizPage() {
                     <span>{questionStatus}</span>
                   </div>
                   <div className="text-sm font-semibold">
-                    {question.type === "short_answer"
+                    {question.type === "short_answer" || question.type === "essay"
                       ? `Points: - / ${question.points}`
                       : `Points: ${Number(question.earnedPoints ?? 0)}/${question.points}`}
                   </div>
@@ -452,20 +493,30 @@ export default function StudentTakeQuizPage() {
                 </div>
               ) : null}
 
-              {question.type === "short_answer" ? (
+              {question.type === "short_answer" ||
+              question.type === "identification" ||
+              question.type === "essay" ? (
                 <div>
                   <textarea
-                    rows={4}
+                    rows={question.type === "essay" ? 8 : 4}
                     value={typeof answer === "string" ? answer : ""}
                     onChange={(e) => setAnswer(question.id, e.target.value)}
                     disabled={isReviewMode}
                     className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50"
-                    placeholder="Type your answer here"
+                    placeholder={
+                      question.type === "identification"
+                        ? "Type the exact answer"
+                        : "Type your answer here"
+                    }
                   />
                   <p className="mt-2 text-xs text-gray-500">
                     {isReviewMode
-                      ? "Short answer items are kept read-only and may still need manual checking."
-                      : "Short answer items may be reviewed manually by your teacher."}
+                      ? question.type === "identification"
+                        ? "This identification answer was checked automatically."
+                        : "This response may still need manual checking."
+                      : question.type === "identification"
+                        ? "Identification answers are checked automatically."
+                        : "This response will be reviewed manually by your teacher."}
                   </p>
                 </div>
               ) : null}

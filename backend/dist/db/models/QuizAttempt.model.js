@@ -49,6 +49,11 @@ QuizAttempt.init({
         defaultValue: 0,
         field: "penalty_points",
     },
+    remainingSeconds: {
+        type: sequelize_1.DataTypes.INTEGER,
+        allowNull: true,
+        field: "remaining_seconds",
+    },
 }, {
     sequelize: db_1.sequelize,
     tableName: "quiz_attempts",

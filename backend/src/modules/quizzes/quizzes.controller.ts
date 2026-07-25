@@ -64,6 +64,7 @@ export async function updateMyQuiz(req: Request, res: Response) {
   const quiz = await updateQuizForTeacher(userId, req.params.id, req.body ?? {});
   if (quiz === null) return res.status(404).json({ ok: false, message: "Teacher profile not found" });
   if (quiz === "past_date") return res.status(400).json({ ok: false, message: "You cannot create a quiz with a past date." });
+  if (quiz === "invalid_password") return res.status(403).json({ ok: false, message: "Incorrect teacher password." });
   if (quiz === false) return res.status(404).json({ ok: false, message: "Quiz not found" });
   return res.json({ ok: true, quiz });
 }

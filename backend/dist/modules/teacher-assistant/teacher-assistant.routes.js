@@ -1,0 +1,18 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_middleware_1 = require("../../middleware/auth.middleware");
+const role_middleware_1 = require("../../middleware/role.middleware");
+const teacher_assistant_controller_1 = require("./teacher-assistant.controller");
+const router = (0, express_1.Router)();
+router.use(auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("teacher"));
+router.post("/quiz/generate", teacher_assistant_controller_1.generateQuiz);
+router.post("/quiz/regenerate-question", teacher_assistant_controller_1.regenerateQuestion);
+router.post("/lesson/generate", teacher_assistant_controller_1.generateLesson);
+router.post("/lesson/regenerate-section", teacher_assistant_controller_1.regenerateSection);
+router.get("/lesson-plans", teacher_assistant_controller_1.getLessonPlans);
+router.post("/lesson-plans", teacher_assistant_controller_1.createLessonPlan);
+router.patch("/lesson-plans/:id", teacher_assistant_controller_1.updateLessonPlan);
+router.get("/lesson-plans/:id/pdf", teacher_assistant_controller_1.exportLessonPdf);
+router.get("/lesson-plans/:id/docx", teacher_assistant_controller_1.exportLessonDocx);
+exports.default = router;

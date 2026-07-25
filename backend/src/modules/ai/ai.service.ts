@@ -1,5 +1,10 @@
 import { applyGuardrails, buildSystemPrompt } from "./ai.guardrails";
-import { createAIProvider, type AIMessage } from "./ai.provider";
+import {
+  createAIProvider,
+  generateOpenAIResponseWithAttachments,
+  type AIAttachment,
+  type AIMessage,
+} from "./ai.provider";
 
 export type AIRequest = {
   role: "student" | "teacher" | "admin";
@@ -31,4 +36,32 @@ export async function generateAIResponse(req: AIRequest): Promise<AIServiceResul
   }
 
   return { ok: true, text: response.text, provider: response.provider };
+}
+
+export async function generateAIResponseWithAttachments(
+  req: AIRequest,
+  attachments: AIAttachment[],
+): Promise<AIServiceResult> {
+  const guardrail = applyGuardrails(
+    [req.prompt, req.context].filter(Boolean).join("\n"),
+  );
+  if (!guardrail.ok) {
+    return { ok: false, reason: guardrail.reason ?? "blocked" };
+  }
+
+  const messages: AIMessage[] = [
+    { role: "system", content: buildSystemPrompt(req.role) },
+  ];
+  if (req.context) {
+    messages.push({ role: "user", content: `Context:\n${req.context}` });
+  }
+  messages.push({ role: "user", content: guardrail.sanitized });
+  const text = await generateOpenAIResponseWithAttachments(
+    messages,
+    attachments,
+  );
+
+  return text
+    ? { ok: true, text, provider: "openai" }
+    : { ok: false, reason: "empty_response" };
 }

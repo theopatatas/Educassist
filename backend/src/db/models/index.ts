@@ -28,6 +28,7 @@ import "./PlatformSetting.model";
 import "./SchoolEvent.model";
 import "./EventNotificationRead.model";
 import "./AdminAccountActivity.model";
+import "./LessonPlan.model";
 
 export { User } from "./User.model";
 export { Teacher } from "./Teacher.model";
@@ -59,3 +60,4 @@ export { PlatformSetting } from "./PlatformSetting.model";
 export { SchoolEvent } from "./SchoolEvent.model";
 export { EventNotificationRead } from "./EventNotificationRead.model";
 export { AdminAccountActivity } from "./AdminAccountActivity.model";
+export { LessonPlan } from "./LessonPlan.model";

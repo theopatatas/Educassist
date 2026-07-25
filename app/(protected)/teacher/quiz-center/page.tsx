@@ -3,7 +3,26 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/src/lib/http/client";
-import { CheckCircle2, Clock, ChevronDown, BarChart2, Plus, X, Calendar } from "lucide-react";
+import {
+  BookOpen,
+  Calculator,
+  Calendar,
+  CheckCircle2,
+  ChevronDown,
+  Clock,
+  Eye,
+  EyeOff,
+  FlaskConical,
+  Globe2,
+  Heart,
+  Languages,
+  LockKeyhole,
+  Palette,
+  Plus,
+  BarChart2,
+  Wrench,
+  X,
+} from "lucide-react";
 
 type QuizItem = {
   id: number;
@@ -130,11 +149,51 @@ function mapQuiz(apiQuiz: ApiQuiz): QuizItem {
   };
 }
 
-function getQuizStatus(date: string) {
+function getQuizStatus(date: string, resultsPublished = false) {
+  if (resultsPublished) return "Closed";
   if (!date || date === "No due date") return "Open";
   const now = new Date();
   const due = new Date(date);
   return Number.isNaN(due.getTime()) ? "Open" : due < now ? "Closed" : "Open";
+}
+
+function QuizSubjectIcon({ subject }: { subject: string }) {
+  const normalized = subject.toLowerCase();
+  let Icon = BookOpen;
+  let tone = "border-indigo-100 bg-indigo-50 text-indigo-600";
+  if (normalized.includes("math")) {
+    Icon = Calculator;
+    tone = "border-blue-100 bg-blue-50 text-blue-600";
+  } else if (normalized.includes("science")) {
+    Icon = FlaskConical;
+    tone = "border-emerald-100 bg-emerald-50 text-emerald-600";
+  } else if (
+    normalized.includes("english") ||
+    normalized.includes("filipino")
+  ) {
+    Icon = Languages;
+    tone = "border-violet-100 bg-violet-50 text-violet-600";
+  } else if (normalized.includes("mapeh")) {
+    Icon = Palette;
+    tone = "border-rose-100 bg-rose-50 text-rose-600";
+  } else if (normalized === "ap" || normalized.includes("araling")) {
+    Icon = Globe2;
+    tone = "border-amber-100 bg-amber-50 text-amber-600";
+  } else if (normalized.includes("tle")) {
+    Icon = Wrench;
+    tone = "border-teal-100 bg-teal-50 text-teal-600";
+  } else if (normalized.includes("values") || normalized.includes("esp")) {
+    Icon = Heart;
+    tone = "border-pink-100 bg-pink-50 text-pink-600";
+  }
+  return (
+    <span
+      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${tone}`}
+      aria-hidden="true"
+    >
+      <Icon className="h-5 w-5" />
+    </span>
+  );
 }
 
 export default function TeacherQuizCenterPage() {
@@ -165,6 +224,10 @@ export default function TeacherQuizCenterPage() {
   const [editQuizDateError, setEditQuizDateError] = useState("");
   const [quizResults, setQuizResults] = useState<QuizResult[]>([]);
   const [quizAnalytics, setQuizAnalytics] = useState<QuizAnalytics | null>(null);
+  const [reopenQuiz, setReopenQuiz] = useState<QuizItem | null>(null);
+  const [reopenPassword, setReopenPassword] = useState("");
+  const [showReopenPassword, setShowReopenPassword] = useState(false);
+  const [isReopening, setIsReopening] = useState(false);
 
   const [newQuiz, setNewQuiz] = useState({
     classId: "",
@@ -425,7 +488,7 @@ export default function TeacherQuizCenterPage() {
     }
   };
 
-  const togglePublish = async (quiz: QuizItem) => {
+  const updatePublishStatus = async (quiz: QuizItem, password?: string) => {
     setSaveError("");
     try {
       await api.patch(`/api/quizzes/${quiz.id}`, {
@@ -435,16 +498,34 @@ export default function TeacherQuizCenterPage() {
         questions: quiz.questions,
         timeLimitMinutes: quiz.timeLimit === "No limit" ? null : Number.parseInt(quiz.timeLimit, 10),
         publishResults: !quiz.publishResults,
+        password,
       });
       await loadData();
       setSelectedQuiz((prev) => (prev && prev.id === quiz.id ? { ...prev, publishResults: !prev.publishResults } : prev));
-    } catch {
-      setSaveError("Failed to update publish status.");
+      setReopenQuiz(null);
+      setReopenPassword("");
+    } catch (error: unknown) {
+      setSaveError(
+        (error as { response?: { data?: { message?: string } } }).response
+          ?.data?.message || "Failed to update publish status.",
+      );
+    } finally {
+      setIsReopening(false);
     }
   };
 
+  const togglePublish = (quiz: QuizItem) => {
+    if (quiz.publishResults) {
+      setReopenQuiz(quiz);
+      setReopenPassword("");
+      setShowReopenPassword(false);
+      return;
+    }
+    void updatePublishStatus(quiz);
+  };
+
   return (
-    <div className="mx-auto max-w-7xl p-6">
+    <div className="mx-auto max-w-7xl p-4 sm:p-6">
       {showConfetti ? (
         <div className="mb-6 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
           <span className="inline-flex items-center gap-2">
@@ -529,10 +610,13 @@ export default function TeacherQuizCenterPage() {
           >
             <div className="p-6">
               <div className="mb-4 flex items-start justify-between gap-3">
-                <span className={`rounded-full border px-3 py-1 text-xs font-bold ${getColor(quiz.color)}`}>{quiz.subjectName}</span>
+                <div className="flex min-w-0 items-center gap-3">
+                  <QuizSubjectIcon subject={quiz.subjectName} />
+                  <span className={`truncate rounded-full border px-3 py-1 text-xs font-bold ${getColor(quiz.color)}`}>{quiz.subjectName}</span>
+                </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  <span className={`rounded-md px-2 py-1 text-xs font-semibold ${getQuizStatus(quiz.date) === "Closed" ? "bg-gray-100 text-gray-700" : "bg-amber-100 text-amber-700"}`}>
-                    {getQuizStatus(quiz.date)}
+                  <span className={`rounded-md px-2 py-1 text-xs font-semibold ${getQuizStatus(quiz.date, quiz.publishResults) === "Closed" ? "bg-gray-100 text-gray-700" : "bg-amber-100 text-amber-700"}`}>
+                    {getQuizStatus(quiz.date, quiz.publishResults)}
                   </span>
                   <span className={`rounded-md px-2 py-1 text-xs font-semibold ${quiz.publishResults ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
                     {quiz.publishResults ? "Results Published" : "Draft Results"}
@@ -587,7 +671,7 @@ export default function TeacherQuizCenterPage() {
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    void togglePublish(quiz);
+                    togglePublish(quiz);
                   }}
                   className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
                     quiz.publishResults ? "bg-green-50 text-green-700 hover:bg-green-100" : "bg-gray-50 text-gray-700 hover:bg-gray-100"
@@ -666,7 +750,7 @@ export default function TeacherQuizCenterPage() {
                 </button>
                   <button
                     type="button"
-                    onClick={() => void togglePublish(selectedQuiz)}
+                    onClick={() => togglePublish(selectedQuiz)}
                     className={`rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
                       selectedQuiz.publishResults ? "bg-green-50 text-green-700 hover:bg-green-100" : "bg-gray-50 text-gray-700 hover:bg-gray-100"
                     }`}
@@ -899,6 +983,82 @@ export default function TeacherQuizCenterPage() {
         </div>
       ) : null}
 
+      {reopenQuiz ? (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+          onClick={() => !isReopening && setReopenQuiz(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl sm:p-6"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                <LockKeyhole className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">
+                  Reopen quiz?
+                </h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  Results are currently published and the quiz is closed.
+                  Enter your teacher password to reopen “{reopenQuiz.title}”.
+                </p>
+              </div>
+            </div>
+
+            <label className="mt-5 block text-sm font-medium text-gray-700">
+              Teacher password
+              <div className="mt-1 flex items-center rounded-xl border border-gray-200 px-3 focus-within:ring-2 focus-within:ring-indigo-100">
+                <input
+                  type={showReopenPassword ? "text" : "password"}
+                  value={reopenPassword}
+                  onChange={(event) => setReopenPassword(event.target.value)}
+                  className="min-w-0 flex-1 py-2.5 outline-none"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowReopenPassword((value) => !value)}
+                  className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"
+                  aria-label={
+                    showReopenPassword ? "Hide password" : "Show password"
+                  }
+                >
+                  {showReopenPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </label>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={isReopening}
+                onClick={() => setReopenQuiz(null)}
+                className="rounded-xl border border-gray-200 px-4 py-2.5 font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!reopenPassword || isReopening}
+                onClick={() => {
+                  setIsReopening(true);
+                  void updatePublishStatus(reopenQuiz, reopenPassword);
+                }}
+                className="rounded-xl bg-indigo-600 px-4 py-2.5 font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {isReopening ? "Verifying…" : "Confirm and Reopen"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {isEditModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
@@ -967,11 +1127,22 @@ export default function TeacherQuizCenterPage() {
                 <input
                   type="checkbox"
                   checked={editQuiz.publishResults}
+                  disabled={
+                    quizzes.find((quiz) => quiz.id === editQuiz.id)
+                      ?.publishResults
+                  }
                   onChange={(e) => setEditQuiz({ ...editQuiz, publishResults: e.target.checked })}
-                  className="h-4 w-4"
+                  className="h-4 w-4 disabled:cursor-not-allowed disabled:opacity-50"
                 />
                 Publish quiz results to students
               </label>
+              {quizzes.find((quiz) => quiz.id === editQuiz.id)
+                ?.publishResults ? (
+                <p className="-mt-2 text-xs text-amber-700">
+                  Use “Results Published” and enter your password to reopen this
+                  quiz.
+                </p>
+              ) : null}
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Number of Questions</label>
                 <input

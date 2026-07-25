@@ -11,6 +11,15 @@ import {
   X,
   Trash2,
   Edit2,
+  Atom,
+  BookOpen,
+  Calculator,
+  FlaskConical,
+  Globe2,
+  Heart,
+  Languages,
+  Palette,
+  Wrench,
 } from "lucide-react";
 
 type ApiClass = {
@@ -57,7 +66,8 @@ const initialClasses: ClassItem[] = [];
 
 function parseMeetingTime(rawValue: string | null | undefined) {
   const raw = rawValue?.trim() || "";
-  if (!raw.includes("|")) return { time: raw, room: "" };
+  if (!raw.includes("|"))
+    return { time: repairTruncatedMeridiem(raw), room: "" };
 
   const [partA, partB] = raw.split("|", 2).map((p) => p.trim());
   const aLooksLikeTime = /(:|am|pm)/i.test(partA);
@@ -66,10 +76,83 @@ function parseMeetingTime(rawValue: string | null | undefined) {
   // Backward-compatible parser:
   // old format: time|room
   // new format: room|time
-  if (aLooksLikeTime && !bLooksLikeTime) return { time: partA, room: partB };
-  if (!aLooksLikeTime && bLooksLikeTime) return { time: partB, room: partA };
+  if (aLooksLikeTime && !bLooksLikeTime)
+    return { time: repairTruncatedMeridiem(partA), room: partB };
+  if (!aLooksLikeTime && bLooksLikeTime)
+    return { time: repairTruncatedMeridiem(partB), room: partA };
 
-  return { time: partA, room: partB };
+  return { time: repairTruncatedMeridiem(partA), room: partB };
+}
+
+function repairTruncatedMeridiem(value: string) {
+  return value.replace(/(\d{1,2}:\d{2})\s+([AP])$/i, "$1 $2M");
+}
+
+function ClassSubjectIcon({ subject }: { subject: string }) {
+  const normalized = subject.toLowerCase();
+  let Icon = BookOpen;
+  let tone = "border-indigo-100 bg-indigo-50 text-indigo-600";
+
+  if (normalized.includes("math")) {
+    Icon = Calculator;
+    tone = "border-blue-100 bg-blue-50 text-blue-600";
+  } else if (normalized.includes("science")) {
+    Icon = FlaskConical;
+    tone = "border-emerald-100 bg-emerald-50 text-emerald-600";
+  } else if (
+    normalized.includes("english") ||
+    normalized.includes("filipino")
+  ) {
+    Icon = Languages;
+    tone = "border-violet-100 bg-violet-50 text-violet-600";
+  } else if (normalized.includes("mapeh")) {
+    Icon = Palette;
+    tone = "border-rose-100 bg-rose-50 text-rose-600";
+  } else if (normalized === "ap" || normalized.includes("araling")) {
+    Icon = Globe2;
+    tone = "border-amber-100 bg-amber-50 text-amber-600";
+  } else if (normalized.includes("tle")) {
+    Icon = Wrench;
+    tone = "border-teal-100 bg-teal-50 text-teal-600";
+  } else if (
+    normalized.includes("values") ||
+    normalized.includes("esp")
+  ) {
+    Icon = Heart;
+    tone = "border-pink-100 bg-pink-50 text-pink-600";
+  } else if (normalized.includes("physics")) {
+    Icon = Atom;
+    tone = "border-cyan-100 bg-cyan-50 text-cyan-600";
+  }
+
+  return (
+    <span
+      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${tone}`}
+      aria-hidden="true"
+    >
+      <Icon className="h-5 w-5" />
+    </span>
+  );
+}
+
+function subjectBadgeTone(subject: string) {
+  const normalized = subject.toLowerCase();
+  if (normalized.includes("math")) return "bg-blue-50 text-blue-700";
+  if (normalized.includes("science"))
+    return "bg-emerald-50 text-emerald-700";
+  if (
+    normalized.includes("english") ||
+    normalized.includes("filipino")
+  )
+    return "bg-violet-50 text-violet-700";
+  if (normalized.includes("mapeh")) return "bg-rose-50 text-rose-700";
+  if (normalized === "ap" || normalized.includes("araling"))
+    return "bg-amber-50 text-amber-700";
+  if (normalized.includes("tle")) return "bg-teal-50 text-teal-700";
+  if (normalized.includes("values") || normalized.includes("esp"))
+    return "bg-pink-50 text-pink-700";
+  if (normalized.includes("physics")) return "bg-cyan-50 text-cyan-700";
+  return "bg-indigo-50 text-indigo-700";
 }
 
 function encodeMeetingTime(time: string, room: string) {
@@ -558,17 +641,17 @@ export default function TeacherClassesPage() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl p-6">
+    <div className="mx-auto max-w-7xl p-4 sm:p-6">
       <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">My Classes</h1>
           <p className="text-gray-500">Manage your sections and schedules</p>
         </div>
-        <div className="flex w-full flex-wrap items-center gap-3 md:w-auto">
+        <div className="flex w-full flex-wrap items-center gap-3 [&>*]:w-full sm:[&>*]:w-auto md:w-auto">
           <select
             value={selectedGrade}
             onChange={(e) => setSelectedGrade(e.target.value)}
-            className="h-10 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500"
+            className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500 sm:w-auto"
             aria-label="Select grade level"
           >
             {gradeOptions.map((grade) => (
@@ -580,7 +663,7 @@ export default function TeacherClassesPage() {
           <select
             value={selectedSection}
             onChange={(e) => setSelectedSection(e.target.value)}
-            className="h-10 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500"
+            className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500 sm:w-auto"
             aria-label="Select section"
           >
             {sectionOptions.map((section) => (
@@ -611,8 +694,13 @@ export default function TeacherClassesPage() {
             className="group cursor-pointer rounded-2xl border border-gray-100 bg-white shadow-sm transition-all hover:-translate-y-1 hover:shadow-md"
           >
             <div className="p-6">
-              <div className="mb-4 flex items-start justify-between">
-                <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-700">{cls.subject}</span>
+              <div className="mb-4 flex items-center gap-3">
+                <ClassSubjectIcon subject={cls.subject} />
+                <span
+                  className={`min-w-0 truncate rounded-full px-3 py-1 text-xs font-bold ${subjectBadgeTone(cls.subject)}`}
+                >
+                  {cls.subject}
+                </span>
               </div>
 
               <h3 className="mb-1 text-xl font-bold text-gray-800">{formatGradeSection(cls.gradeLevel, cls.name)}</h3>
@@ -632,7 +720,9 @@ export default function TeacherClassesPage() {
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-50 text-gray-400">
                     <Clock className="h-4 w-4" />
                   </div>
-                  <span className="font-medium">{cls.time || "TBA"}</span>
+                  <span className="whitespace-nowrap font-medium">
+                    {cls.time || "TBA"}
+                  </span>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-gray-600">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-50 text-gray-400">
@@ -889,7 +979,7 @@ export default function TeacherClassesPage() {
                 </div>
                 <p className="mt-1 text-xs text-gray-500">{editClass.days.length ? editClass.days.join(", ") : "Select one or more weekdays."}</p>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Start Time</label>
                   <input
@@ -1062,7 +1152,7 @@ export default function TeacherClassesPage() {
                 </div>
                 <p className="mt-1 text-xs text-gray-500">{newClass.days.length ? newClass.days.join(", ") : "Select one or more weekdays."}</p>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Start Time</label>
                   <input

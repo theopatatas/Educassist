@@ -56,7 +56,7 @@ Class.init({
         field: "meeting_day",
     },
     meetingTime: {
-        type: sequelize_1.DataTypes.STRING(20),
+        type: sequelize_1.DataTypes.STRING(100),
         allowNull: true,
         field: "meeting_time",
     },

@@ -397,13 +397,13 @@ export default function TeacherAssignmentPage() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl p-6">
+    <div className="mx-auto max-w-7xl p-4 sm:p-6">
       <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Assignments</h1>
           <p className="text-gray-500">Track homework and projects</p>
         </div>
-        <div className="flex w-full flex-wrap items-center gap-3 md:w-auto md:flex-nowrap">
+        <div className="flex w-full flex-wrap items-center gap-3 [&>*]:w-full sm:[&>*]:w-auto md:w-auto md:flex-nowrap">
           <div className="relative min-w-[190px]">
             <select
               value={selectedGrade}
@@ -617,7 +617,7 @@ export default function TeacherAssignmentPage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
                   <p className="text-xs font-semibold uppercase text-gray-500">Subject</p>
                   <p className="text-sm font-medium text-gray-800">{selectedClass?.subjectName || "—"}</p>
@@ -719,7 +719,7 @@ export default function TeacherAssignmentPage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
                   <p className="text-xs font-semibold uppercase text-gray-500">Subject</p>
                   <p className="text-sm font-medium text-gray-800">{selectedEditClass?.subjectName || "—"}</p>
@@ -816,7 +816,7 @@ export default function TeacherAssignmentPage() {
             </div>
 
             <div className="overflow-y-auto p-6">
-              <div className="mb-8 flex gap-6 text-sm text-gray-600">
+              <div className="mb-8 flex flex-wrap gap-4 text-sm text-gray-600 sm:gap-6">
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4" />
                   <span>Due: {selectedAssignment.dueDate}</span>

@@ -264,14 +264,14 @@ export default function TeacherAttendancePage() {
   const statusBadge = badge(todayRecord?.status);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-6">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6">
       <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Attendance</h1>
           <p className="text-gray-500">Track attendance by section and grade level</p>
         </div>
 
-        <div className="flex w-full flex-wrap items-center gap-3 md:w-auto md:flex-nowrap">
+        <div className="flex w-full flex-wrap items-center gap-3 [&>*]:w-full sm:[&>*]:w-auto md:w-auto md:flex-nowrap">
           <div className="relative">
             <select
               value={effectiveSection}
@@ -354,7 +354,7 @@ export default function TeacherAttendancePage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 lg:col-span-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:col-span-2">
           <div className="flex items-center justify-between rounded-2xl border border-green-100 bg-green-50 p-4">
             <div>
               <p className="text-xs font-bold uppercase text-green-700">Present</p>

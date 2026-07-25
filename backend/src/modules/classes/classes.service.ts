@@ -248,7 +248,7 @@ export async function createClassForTeacher(userId: string, input: CreateClassIn
   const resolvedClassName = (input.className ?? input.subjectName ?? null)?.toString().slice(0, 120) ?? null;
   const meetingDayValue = serializeMeetingDays(input.meetingDay);
   const meetingDay = meetingDayValue ? meetingDayValue.slice(0, 20) : null;
-  const meetingTime = input.meetingTime?.toString().slice(0, 20) ?? null;
+  const meetingTime = input.meetingTime?.toString().slice(0, 100) ?? null;
   const cls = await Class.create({
     teacherId: teacher.id,
     name: resolvedClassName,
@@ -292,7 +292,9 @@ export async function updateClassForTeacher(
   const meetingDaySource = input.meetingDay !== undefined ? input.meetingDay : cls.meetingDay;
   const meetingDayValue = serializeMeetingDays(meetingDaySource);
   const meetingDay = meetingDayValue ? meetingDayValue.slice(0, 20) : null;
-  const meetingTime = (input.meetingTime ?? cls.meetingTime)?.toString().slice(0, 20) ?? null;
+  const meetingTime = (input.meetingTime ?? cls.meetingTime)
+    ?.toString()
+    .slice(0, 100) ?? null;
 
   await cls.update({
     subjectId,

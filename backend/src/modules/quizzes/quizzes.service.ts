@@ -9,12 +9,18 @@ import { Section } from "../../db/models/Section.model";
 import { Student } from "../../db/models/Student.model";
 import { Subject } from "../../db/models/Subject.model";
 import { Teacher } from "../../db/models/Teacher.model";
+import { Grade } from "../../db/models/Grade.model";
+import { GradeItem } from "../../db/models/GradeItem.model";
+import { Op } from "sequelize";
+import { verifyUserPassword } from "../auth/auth.service";
 
 export type QuestionType =
   | "multiple_choice"
   | "checkbox"
   | "true_false"
-  | "short_answer";
+  | "short_answer"
+  | "identification"
+  | "essay";
 
 export type CreateQuizInput = {
   classId?: number;
@@ -23,6 +29,16 @@ export type CreateQuizInput = {
   timeLimitMinutes?: number | null;
   questions?: number;
   publishResults?: boolean;
+  description?: string;
+  availableFrom?: string | null;
+  published?: boolean;
+  attemptsAllowed?: number;
+  randomizeQuestions?: boolean;
+  randomizeChoices?: boolean;
+  passingScore?: number;
+  visibility?: string;
+  source?: string;
+  password?: string;
 };
 
 export type QuizBuilderQuestionInput = {
@@ -32,6 +48,7 @@ export type QuizBuilderQuestionInput = {
   options?: string[];
   correctAnswer?: unknown;
   points?: number;
+  explanation?: string;
 };
 
 export type QuizAnswerInput = {
@@ -46,6 +63,7 @@ type QuizQuestionDetail = {
   options: string[];
   correctAnswer: unknown;
   points: number;
+  explanation: string;
 };
 
 export type TeacherQuizResult = {
@@ -74,6 +92,15 @@ function parseSettings(settingsJson: unknown) {
     dueDate?: string | null;
     questions?: number;
     publishResults?: boolean;
+    description?: string;
+    availableFrom?: string | null;
+    published?: boolean;
+    attemptsAllowed?: number;
+    randomizeQuestions?: boolean;
+    randomizeChoices?: boolean;
+    passingScore?: number;
+    visibility?: string;
+    source?: string;
   } = {};
   if (typeof settingsJson === "string") {
     try {
@@ -81,6 +108,15 @@ function parseSettings(settingsJson: unknown) {
         dueDate?: string | null;
         questions?: number;
         publishResults?: boolean;
+        description?: string;
+        availableFrom?: string | null;
+        published?: boolean;
+        attemptsAllowed?: number;
+        randomizeQuestions?: boolean;
+        randomizeChoices?: boolean;
+        passingScore?: number;
+        visibility?: string;
+        source?: string;
       };
     } catch {
       parsed = {};
@@ -90,12 +126,30 @@ function parseSettings(settingsJson: unknown) {
       dueDate?: string | null;
       questions?: number;
       publishResults?: boolean;
+      description?: string;
+      availableFrom?: string | null;
+      published?: boolean;
+      attemptsAllowed?: number;
+      randomizeQuestions?: boolean;
+      randomizeChoices?: boolean;
+      passingScore?: number;
+      visibility?: string;
+      source?: string;
     };
   }
   return {
     dueDate: parsed?.dueDate ?? null,
     questions: Number(parsed?.questions ?? 0),
     publishResults: Boolean(parsed?.publishResults ?? false),
+    description: String(parsed?.description ?? ""),
+    availableFrom: parsed?.availableFrom ?? null,
+    published: parsed?.published !== false,
+    attemptsAllowed: Math.max(1, Number(parsed?.attemptsAllowed ?? 1)),
+    randomizeQuestions: Boolean(parsed?.randomizeQuestions),
+    randomizeChoices: Boolean(parsed?.randomizeChoices),
+    passingScore: Math.min(100, Math.max(0, Number(parsed?.passingScore ?? 75))),
+    visibility: String(parsed?.visibility ?? "class"),
+    source: String(parsed?.source ?? "manual"),
   };
 }
 
@@ -184,7 +238,7 @@ function normalizeAnswerForCompare(value: unknown, type: QuestionType) {
 }
 
 function answersMatch(question: QuizQuestionDetail, studentAnswer: unknown) {
-  if (question.type === "short_answer") {
+  if (question.type === "short_answer" || question.type === "essay") {
     return null;
   }
 
@@ -211,6 +265,17 @@ function timeTakenLabel(startedAt?: Date | null, completedAt?: Date | null) {
   const ended = completedAt ? new Date(completedAt).getTime() : null;
   if (!started || !ended || ended <= started) return "-";
   return `${Math.max(1, Math.round((ended - started) / (1000 * 60)))} mins`;
+}
+
+function shuffled<T>(items: T[], seed: number) {
+  const result = [...items];
+  let state = Math.abs(seed) || 1;
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    state = (state * 9301 + 49297) % 233280;
+    const target = Math.floor((state / 233280) * (index + 1));
+    [result[index], result[target]] = [result[target], result[index]];
+  }
+  return result;
 }
 
 async function getTeacherByUserId(userId: string) {
@@ -257,6 +322,7 @@ async function getQuizQuestionsWithBank(quizId: number) {
         options: parseOptions(question.choicesJson),
         correctAnswer: parseStoredCorrectAnswer(question.correctAnswer),
         points: safePoints(question.points),
+        explanation: question.explanation ?? "",
       };
     })
     .filter(Boolean) as QuizQuestionDetail[];
@@ -281,6 +347,12 @@ async function ensureStudentQuizAccess(userId: string, quizId: string) {
 
   const quiz = await Quiz.findByPk(quizId);
   if (!quiz || !quiz.classId) return false;
+  const settings = parseSettings(quiz.settingsJson);
+  if (!settings.published || settings.visibility === "private") return false;
+  if (settings.availableFrom) {
+    const availableAt = new Date(settings.availableFrom).getTime();
+    if (!Number.isNaN(availableAt) && availableAt > Date.now()) return false;
+  }
 
   const cls = await Class.findByPk(quiz.classId);
   if (
@@ -404,6 +476,7 @@ export async function listQuizzesForTeacher(userId: string) {
       dueDate: settings.dueDate,
       questions: settings.questions,
       publishResults: settings.publishResults,
+      settings,
       completed: summary.completed,
       total: summary.total,
       avgScore: summary.avgScore,
@@ -475,7 +548,15 @@ export async function listQuizzesForStudent(userId: string) {
     );
   }
 
-  return quizzes.map((q) => {
+  const visibleQuizzes = quizzes.filter((quiz) => {
+    const settings = parseSettings(quiz.settingsJson);
+    if (!settings.published || settings.visibility === "private") return false;
+    if (!settings.availableFrom) return true;
+    const availableAt = new Date(settings.availableFrom).getTime();
+    return Number.isNaN(availableAt) || availableAt <= Date.now();
+  });
+
+  return visibleQuizzes.map((q) => {
     const cls = q.classId ? classMap.get(Number(q.classId)) : null;
     const subjectName = cls?.subjectId
       ? (metadata.subjectMap.get(Number(cls.subjectId)) ?? null)
@@ -523,6 +604,7 @@ export async function listQuizzesForStudent(userId: string) {
       myScore,
       myCorrectAnswers,
       classAvg,
+      settings,
     };
   });
 }
@@ -542,12 +624,25 @@ export async function createQuizForTeacher(
   return Quiz.create({
     classId: cls.id,
     title: input.title.trim().slice(0, 160),
-    timeLimit: input.timeLimitMinutes ?? null,
+    timeLimit:
+      input.timeLimitMinutes == null ||
+      !Number.isFinite(Number(input.timeLimitMinutes))
+        ? null
+        : Math.max(1, Math.round(Number(input.timeLimitMinutes))),
     attemptLimit: 1,
     settingsJson: {
       dueDate: input.dueDate ?? null,
       questions: Number(input.questions ?? 0),
       publishResults: Boolean(input.publishResults ?? false),
+      description: String(input.description ?? "").trim(),
+      availableFrom: input.availableFrom ?? null,
+      published: input.published !== false,
+      attemptsAllowed: Math.max(1, Number(input.attemptsAllowed ?? 1)),
+      randomizeQuestions: Boolean(input.randomizeQuestions),
+      randomizeChoices: Boolean(input.randomizeChoices),
+      passingScore: Math.min(100, Math.max(0, Number(input.passingScore ?? 75))),
+      visibility: String(input.visibility ?? "class"),
+      source: String(input.source ?? "manual"),
     },
   });
 }
@@ -562,6 +657,13 @@ export async function updateQuizForTeacher(
 
   const { quiz, cls } = access;
   const previousSettings = parseSettings(quiz.settingsJson);
+  if (
+    previousSettings.publishResults &&
+    input.publishResults === false &&
+    !(await verifyUserPassword(userId, String(input.password ?? "")))
+  ) {
+    return "invalid_password";
+  }
   const nextDueDate =
     input.dueDate !== undefined ? input.dueDate : previousSettings.dueDate;
   if (isPastQuizDate(nextDueDate)) return "past_date";
@@ -575,13 +677,31 @@ export async function updateQuizForTeacher(
   await quiz.update({
     classId,
     title: input.title?.trim() ? input.title.trim().slice(0, 160) : quiz.title,
-    timeLimit: input.timeLimitMinutes ?? quiz.timeLimit,
+    timeLimit:
+      input.timeLimitMinutes !== undefined
+        ? input.timeLimitMinutes == null ||
+          !Number.isFinite(Number(input.timeLimitMinutes))
+          ? null
+          : Math.max(1, Math.round(Number(input.timeLimitMinutes)))
+        : quiz.timeLimit,
     settingsJson: {
       dueDate: input.dueDate ?? previousSettings.dueDate,
       questions: Number(input.questions ?? previousSettings.questions ?? 0),
       publishResults: Boolean(
         input.publishResults ?? previousSettings.publishResults ?? false,
       ),
+      description: input.description ?? previousSettings.description,
+      availableFrom: input.availableFrom ?? previousSettings.availableFrom,
+      published: input.published ?? previousSettings.published,
+      attemptsAllowed:
+        input.attemptsAllowed ?? previousSettings.attemptsAllowed,
+      randomizeQuestions:
+        input.randomizeQuestions ?? previousSettings.randomizeQuestions,
+      randomizeChoices:
+        input.randomizeChoices ?? previousSettings.randomizeChoices,
+      passingScore: input.passingScore ?? previousSettings.passingScore,
+      visibility: input.visibility ?? previousSettings.visibility,
+      source: input.source ?? previousSettings.source,
     },
   });
 
@@ -614,6 +734,7 @@ export async function getQuizDetailForTeacher(userId: string, quizId: string) {
       ? (metadata.subjectMap.get(Number(cls.subjectId)) ?? "Subject")
       : "Subject",
     publishResults: settings.publishResults,
+    settings,
     summary,
     questions,
   };
@@ -645,6 +766,13 @@ export async function getQuizDetailForStudent(userId: string, quizId: string) {
     answerMap.set(Number(row.questionId), row);
   }
 
+  const presentedQuestions = settings.randomizeQuestions
+    ? shuffled(questions, Number(student.id) + Number(quiz.id))
+    : questions;
+  const completedAttempts = await QuizAttempt.count({
+    where: { quizId: quiz.id, studentId: student.id, completedAt: { [Op.ne]: null } },
+  });
+
   return {
     id: Number(quiz.id),
     title: quiz.title,
@@ -658,6 +786,7 @@ export async function getQuizDetailForStudent(userId: string, quizId: string) {
       ? (metadata.subjectMap.get(Number(cls.subjectId)) ?? "Subject")
       : "Subject",
     publishResults: settings.publishResults,
+    settings,
     myAttempt: attempt?.completedAt
       ? "Submitted"
       : attempt?.startedAt
@@ -666,12 +795,21 @@ export async function getQuizDetailForStudent(userId: string, quizId: string) {
     myScore: Number(attempt?.score ?? 0),
     startedAt: attempt?.startedAt ?? null,
     completedAt: attempt?.completedAt ?? null,
+    canRetake:
+      Boolean(attempt?.completedAt) &&
+      completedAttempts < settings.attemptsAllowed &&
+      !settings.publishResults,
     penaltyPoints: Number(attempt?.penaltyPoints ?? 0),
-    questions: questions.map((question) => ({
+    questions: presentedQuestions.map((question) => ({
       id: question.id,
       type: question.type,
       text: question.text,
-      options: question.options,
+      options: settings.randomizeChoices
+        ? shuffled(
+            question.options,
+            Number(student.id) + Number(question.id),
+          )
+        : question.options,
       points: question.points,
       answer: parseStoredCorrectAnswer(
         answerMap.get(question.id)?.answer ?? null,
@@ -721,6 +859,7 @@ export async function saveQuizQuestionsForTeacher(
       questionText: text,
       choicesJson: options,
       correctAnswer: serializeCorrectAnswer(item.correctAnswer, type),
+      explanation: String(item.explanation ?? "").trim(),
       questionType: type,
       points: safePoints(item.points),
     };
@@ -758,9 +897,30 @@ export async function startQuizForStudent(userId: string, quizId: string) {
   const settings = parseSettings(quiz.settingsJson);
   const existing = await QuizAttempt.findOne({
     where: { quizId: quiz.id, studentId: student.id },
+    order: [["updatedAt", "DESC"]],
   });
   if (settings.publishResults && !existing?.completedAt) {
     return "closed";
+  }
+  if (existing?.completedAt) {
+    const completedAttempts = await QuizAttempt.count({
+      where: {
+        quizId: quiz.id,
+        studentId: student.id,
+        completedAt: { [Op.ne]: null },
+      },
+    });
+    if (completedAttempts < settings.attemptsAllowed) {
+      return QuizAttempt.create({
+        quizId: Number(quiz.id),
+        studentId: Number(student.id),
+        startedAt: new Date(),
+        completedAt: null,
+        score: 0,
+        penaltyPoints: 0,
+      });
+    }
+    return existing;
   }
   if (existing) {
     if (!existing.startedAt) {
@@ -798,6 +958,7 @@ export async function submitQuizForStudent(
 
   let attempt = await QuizAttempt.findOne({
     where: { quizId: quiz.id, studentId: student.id },
+    order: [["updatedAt", "DESC"]],
   });
   if (settings.publishResults && !attempt?.completedAt) {
     return "closed";
@@ -814,7 +975,10 @@ export async function submitQuizForStudent(
   }
 
   const totalAutoGradedPoints = questions
-    .filter((question) => question.type !== "short_answer")
+    .filter(
+      (question) =>
+        question.type !== "short_answer" && question.type !== "essay",
+    )
     .reduce((sum, question) => sum + question.points, 0);
 
   let earnedPoints = 0;
@@ -825,7 +989,7 @@ export async function submitQuizForStudent(
     const isCorrect = answersMatch(question, studentAnswer);
     const questionScore = isCorrect === true ? question.points : 0;
 
-    if (question.type === "short_answer") {
+    if (question.type === "short_answer" || question.type === "essay") {
       manualReviewCount += 1;
     } else {
       earnedPoints += questionScore;
@@ -834,7 +998,10 @@ export async function submitQuizForStudent(
     const payload = {
       answer: JSON.stringify(studentAnswer ?? null),
       isCorrect,
-      score: question.type === "short_answer" ? null : questionScore,
+      score:
+        question.type === "short_answer" || question.type === "essay"
+          ? null
+          : questionScore,
     };
 
     const existing = await QuizAttemptAnswer.findOne({
@@ -864,7 +1031,46 @@ export async function submitQuizForStudent(
     startedAt: attempt.startedAt ?? new Date(),
     completedAt: new Date(),
     score: percentageScore,
+    remainingSeconds:
+      quiz.timeLimit && attempt.startedAt
+        ? Math.max(
+            0,
+            Math.round(
+              (new Date(attempt.startedAt).getTime() +
+                Number(quiz.timeLimit) * 60_000 -
+                Date.now()) /
+                1000,
+            ),
+          )
+        : null,
   });
+
+  if (manualReviewCount === 0 && quiz.classId) {
+    const [gradeItem] = await GradeItem.findOrCreate({
+      where: { classId: quiz.classId, name: `Quiz: ${quiz.title}` },
+      defaults: {
+        classId: Number(quiz.classId),
+        name: `Quiz: ${quiz.title}`,
+        weight: 1,
+        maxScore: 100,
+        dueDate: settings.dueDate
+          ? String(settings.dueDate).slice(0, 10)
+          : null,
+      },
+    });
+    const existingGrade = await Grade.findOne({
+      where: { gradeItemId: gradeItem.id, studentId: student.id },
+    });
+    if (existingGrade) {
+      await existingGrade.update({ score: percentageScore });
+    } else {
+      await Grade.create({
+        gradeItemId: Number(gradeItem.id),
+        studentId: Number(student.id),
+        score: percentageScore,
+      });
+    }
+  }
 
   return {
     attempt,

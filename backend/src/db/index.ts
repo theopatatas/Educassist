@@ -167,6 +167,9 @@ export async function applySchemaPatches() {
   try {
     const qi = sequelize.getQueryInterface();
     const classes = await qi.describeTable("classes");
+    await qi.sequelize.query(
+      "ALTER TABLE `classes` MODIFY COLUMN `meeting_time` VARCHAR(100) NULL;",
+    );
     if (!("building_name" in classes)) {
       await qi.sequelize.query(
         "ALTER TABLE `classes` ADD COLUMN `building_name` VARCHAR(120) NULL AFTER `grade_level`;",
@@ -224,6 +227,11 @@ export async function applySchemaPatches() {
     if (!("penalty_points" in quizAttempts)) {
       await qi.sequelize.query(
         "ALTER TABLE `quiz_attempts` ADD COLUMN `penalty_points` INT NOT NULL DEFAULT 0 AFTER `score`;",
+      );
+    }
+    if (!("remaining_seconds" in quizAttempts)) {
+      await qi.sequelize.query(
+        "ALTER TABLE `quiz_attempts` ADD COLUMN `remaining_seconds` INT NULL AFTER `penalty_points`;",
       );
     }
   } catch {

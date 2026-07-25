@@ -520,19 +520,20 @@ export default function TeacherGradePortalPage() {
   };
 
   return (
-    <div className="relative mx-auto max-w-7xl p-6">
-      <div className="mb-6 flex flex-col items-start justify-between gap-4 lg:flex-row lg:items-center">
+    <div className="relative mx-auto max-w-7xl p-4 sm:p-6">
+      <div className="mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Teacher Gradebook</h1>
           <p className="text-gray-500">Manage and record student grades • {term}</p>
         </div>
 
-        <div className="flex w-full flex-wrap gap-3 lg:w-auto">
-          <div className="relative">
+        <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="relative min-w-0">
             <select
               value={selectedSection}
               onChange={(e) => setSelectedSection(e.target.value)}
-              className="h-10 rounded-xl border border-gray-200 bg-white px-4 py-2 font-medium text-gray-700 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="h-10 w-full rounded-xl border border-gray-200 bg-white px-4 py-2 font-medium text-gray-700 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               {sectionOptions.map((section) => (
                 <option key={section} value={section}>
@@ -542,11 +543,11 @@ export default function TeacherGradePortalPage() {
             </select>
           </div>
 
-          <div className="relative">
+          <div className="relative min-w-0">
             <select
               value={selectedGrade}
               onChange={(e) => setSelectedGrade(e.target.value)}
-              className="h-10 rounded-xl border border-gray-200 bg-white px-4 py-2 font-medium text-gray-700 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="h-10 w-full rounded-xl border border-gray-200 bg-white px-4 py-2 font-medium text-gray-700 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               {gradeOptions.map((grade) => (
                 <option key={grade} value={grade}>
@@ -556,11 +557,11 @@ export default function TeacherGradePortalPage() {
             </select>
           </div>
 
-          <div className="relative">
+          <div className="relative min-w-0">
             <select
               value={selectedSubject}
               onChange={(e) => setSelectedSubject(e.target.value as "all" | SubjectKey)}
-              className="h-10 rounded-xl border border-gray-200 bg-white px-4 py-2 font-medium text-gray-700 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="h-10 w-full rounded-xl border border-gray-200 bg-white px-4 py-2 font-medium text-gray-700 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               {subjectOptions.map((subjectKey) => (
                 <option key={subjectKey} value={subjectKey}>
@@ -570,11 +571,11 @@ export default function TeacherGradePortalPage() {
             </select>
           </div>
 
-          <div className="relative">
+          <div className="relative min-w-0">
             <select
               value={term}
               onChange={(e) => setTerm(e.target.value as Term)}
-              className="h-10 rounded-xl border border-gray-200 bg-white px-4 py-2 font-medium text-gray-700 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="h-10 w-full rounded-xl border border-gray-200 bg-white px-4 py-2 font-medium text-gray-700 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="1st Grading">1st Grading</option>
               <option value="2nd Grading">2nd Grading</option>
@@ -582,8 +583,10 @@ export default function TeacherGradePortalPage() {
               <option value="4th Grading">4th Grading</option>
             </select>
           </div>
+          </div>
 
-          <div className="relative min-w-[220px] flex-1">
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+          <div className="relative min-w-0 flex-1">
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -593,27 +596,29 @@ export default function TeacherGradePortalPage() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           </div>
 
+          <div className="grid grid-cols-2 gap-3 sm:flex">
           <button
             onClick={() => {
               const next = sortBy === "name" ? "average" : "name";
               setSortBy(next);
               flashToast(`Sorting by ${next}`);
             }}
-            className="flex h-10 items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            className="flex h-10 items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-2 font-medium text-gray-700 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
             title="Toggle sort field"
           >
             <ArrowUpDown className="h-4 w-4" />
-            <span className="hidden sm:inline">Sort</span>
+            <span>Sort</span>
           </button>
 
           <button
             onClick={handleExport}
-            className="flex h-10 items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            className="flex h-10 items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-2 font-medium text-gray-700 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
           >
             <Download className="h-4 w-4" />
-            <span className="hidden sm:inline">Export CSV</span>
+            <span>Export CSV</span>
           </button>
-
+          </div>
+          </div>
         </div>
       </div>
 
@@ -627,28 +632,36 @@ export default function TeacherGradePortalPage() {
         <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-bold uppercase text-gray-400">Class Average</p>
           <p className="mt-2 flex items-center gap-2 text-2xl font-bold text-gray-800">
-            <BarChart3 className="h-5 w-5 text-gray-500" />
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+              <BarChart3 className="h-5 w-5" />
+            </span>
             {dashboard.classAverage}%
           </p>
         </div>
         <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-bold uppercase text-gray-400">Highest</p>
           <p className="mt-2 flex items-center gap-2 text-2xl font-bold text-gray-800">
-            <Trophy className="h-5 w-5 text-gray-500" />
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+              <Trophy className="h-5 w-5" />
+            </span>
             {dashboard.highestAverage}%
           </p>
         </div>
         <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-bold uppercase text-gray-400">Lowest</p>
           <p className="mt-2 flex items-center gap-2 text-2xl font-bold text-gray-800">
-            <TrendingUp className="h-5 w-5 text-gray-500" />
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
+              <TrendingUp className="h-5 w-5" />
+            </span>
             {dashboard.lowestAverage}%
           </p>
         </div>
         <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-bold uppercase text-gray-400">At Risk (&lt;75)</p>
           <p className="mt-2 flex items-center gap-2 text-2xl font-bold text-gray-800">
-            <AlertTriangle className="h-5 w-5 text-gray-500" />
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
+              <AlertTriangle className="h-5 w-5" />
+            </span>
             {dashboard.atRiskCount}
           </p>
         </div>
@@ -695,6 +708,8 @@ export default function TeacherGradePortalPage() {
                           max="100"
                           value={student[subj.key]}
                           disabled={isPublished || !editableSubjectKeys.has(subj.key)}
+                          onFocus={(e) => e.currentTarget.select()}
+                          onClick={(e) => e.currentTarget.select()}
                           onChange={(e) => handleGradeChange(student.id, subj.key, e.target.value)}
                           className={`w-14 rounded-md bg-transparent py-1 text-center text-sm font-medium outline-none transition-all hover:bg-white focus:bg-white focus:ring-2 focus:ring-indigo-500 ${getGradeColor(student[subj.key])} ${
                             isPublished || !editableSubjectKeys.has(subj.key) ? "cursor-not-allowed opacity-60" : ""

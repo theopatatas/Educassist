@@ -64,7 +64,7 @@ Class.init(
       field: "meeting_day",
     },
     meetingTime: {
-      type: DataTypes.STRING(20),
+      type: DataTypes.STRING(100),
       allowNull: true,
       field: "meeting_time",
     },

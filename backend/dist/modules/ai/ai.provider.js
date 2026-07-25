@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createAIProvider = createAIProvider;
 exports.isExternalAIEnabled = isExternalAIEnabled;
+exports.generateOpenAIResponseWithAttachments = generateOpenAIResponseWithAttachments;
 const openai_1 = __importDefault(require("openai"));
 const env_1 = require("../../config/env");
 function createRulesProvider() {
@@ -70,4 +71,48 @@ function createAIProvider() {
 }
 function isExternalAIEnabled() {
     return Boolean(env_1.env.OPENAI_API_KEY);
+}
+async function generateOpenAIResponseWithAttachments(messages, attachments) {
+    if (!env_1.env.OPENAI_API_KEY) {
+        throw new Error("AI file analysis is not configured");
+    }
+    const client = new openai_1.default({
+        apiKey: env_1.env.OPENAI_API_KEY,
+        ...(env_1.env.OPENAI_BASE_URL ? { baseURL: env_1.env.OPENAI_BASE_URL } : {}),
+    });
+    const rawModel = env_1.env.OPENAI_MODEL ?? "gpt-4o-mini";
+    const model = env_1.env.OPENAI_BASE_URL?.includes("openrouter.ai") && !rawModel.includes("/")
+        ? `openai/${rawModel}`
+        : rawModel;
+    const systemMessage = messages.find((message) => message.role === "system");
+    const userMessages = messages.filter((message) => message.role === "user");
+    const prompt = userMessages.map((message) => message.content).join("\n\n");
+    const content = [
+        { type: "text", text: prompt },
+        ...attachments.map((attachment) => attachment.mimeType.startsWith("image/")
+            ? {
+                type: "image_url",
+                image_url: {
+                    url: `data:${attachment.mimeType};base64,${attachment.data.toString("base64")}`,
+                },
+            }
+            : {
+                type: "file",
+                file: {
+                    filename: attachment.filename,
+                    file_data: `data:${attachment.mimeType};base64,${attachment.data.toString("base64")}`,
+                },
+            }),
+    ];
+    const completion = await client.chat.completions.create({
+        model,
+        messages: [
+            ...(systemMessage
+                ? [systemMessage]
+                : []),
+            { role: "user", content },
+        ],
+        temperature: 0.4,
+    });
+    return completion.choices[0]?.message?.content ?? "";
 }

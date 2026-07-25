@@ -24,6 +24,7 @@
     "cors": "^2.8.6",
     "csv-writer": "^1.6.0",
     "dayjs": "^1.11.19",
+    "docx": "^9.7.1",
     "dotenv": "^17.2.4",
     "express": "^4.22.1",
     "express-rate-limit": "^8.2.1",

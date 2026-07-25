@@ -2,14 +2,31 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Bell, Menu, LogOut, Settings, UserCircle, X, GraduationCap } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/src/features/auth/hooks";
 import { api } from "@/src/lib/http/client";
 
 type Notice = { id: number; title: string; time: string; read: boolean };
 
-export default function TeacherHeader() {
+type TeacherHeaderProps = {
+  onMenuClick: () => void;
+};
+
+const pageTitles: Record<string, string> = {
+  "/teacher/dashboard": "Dashboard",
+  "/teacher/assistant": "Teacher Assistant",
+  "/teacher/classes": "Classes",
+  "/teacher/quiz-center": "Quiz Center",
+  "/teacher/exam-hall": "Exam Schedule",
+  "/teacher/assignment": "Assignment",
+  "/teacher/grade-portal": "Grade Portal",
+  "/teacher/attendance": "Attendance",
+  "/teacher/reports": "Reports",
+};
+
+export default function TeacherHeader({ onMenuClick }: TeacherHeaderProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { logout } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -62,6 +79,11 @@ export default function TeacherHeader() {
     .map((s) => s[0]?.toUpperCase())
     .join("");
 
+  const activePageTitle =
+    Object.entries(pageTitles).find(
+      ([href]) => pathname === href || pathname.startsWith(`${href}/`),
+    )?.[1] || "Teacher Portal";
+
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
       setPasswordStatus("Please fill in all password fields.");
@@ -95,24 +117,35 @@ export default function TeacherHeader() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 h-16 bg-white/90 px-6 shadow-md backdrop-blur">
+      <header className="sticky top-0 z-30 h-16 bg-white/90 px-3 shadow-md backdrop-blur sm:px-4 lg:px-6">
         <div className="flex h-full items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Menu className="h-6 w-6 text-slate-500 md:hidden" />
+          <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+            <button
+              type="button"
+              onClick={onMenuClick}
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 md:hidden"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
             <div className="flex items-center gap-2">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-slate-900 via-slate-700 to-slate-500 text-white">
                 <GraduationCap className="h-5 w-5" />
               </div>
-              <div className="leading-tight">
+              <div className="hidden leading-tight lg:block">
                 <span className="block text-xl font-extrabold text-slate-900">EducAssist</span>
                 <span className="block -mt-1 text-[11px] text-slate-500">Teacher Portal</span>
               </div>
             </div>
           </div>
 
-          <div className="hidden items-center gap-3 md:flex" />
+          <div className="flex min-w-0 flex-1 items-center px-2 sm:px-4 lg:px-8">
+            <h1 className="truncate text-base font-bold tracking-tight text-slate-900 sm:text-xl lg:text-2xl">
+              {activePageTitle}
+            </h1>
+          </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-3 lg:gap-4">
             <div className="relative">
               <button
                 onClick={() => setShowNotifications((v) => !v)}
@@ -131,7 +164,7 @@ export default function TeacherHeader() {
               {showNotifications ? (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
-                  <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-xl border bg-white shadow-xl">
+                  <div className="absolute right-0 z-50 mt-2 w-[min(20rem,calc(100vw-1rem))] overflow-hidden rounded-xl border bg-white shadow-xl">
                     <div className="flex items-center justify-between border-b p-4 font-bold">
                       <span>Notifications</span>
                       {unreadCount > 0 && (
@@ -226,7 +259,7 @@ export default function TeacherHeader() {
             className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm"
             onClick={() => setShowProfileModal(false)}
           />
-          <div className="fixed left-1/2 top-1/2 z-50 w-[420px] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <div className="fixed left-1/2 top-1/2 z-50 max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-[420px] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center gap-4 p-5 shadow-[0_1px_0_0_rgba(15,23,42,0.08)]">
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-lg font-semibold text-slate-700">
                 {initials || "T"}
@@ -343,7 +376,7 @@ export default function TeacherHeader() {
             className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm"
             onClick={() => setShowSettingsModal(false)}
           />
-          <div className="fixed left-1/2 top-1/2 z-50 w-[440px] -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white shadow-2xl">
+          <div className="fixed left-1/2 top-1/2 z-50 max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-[440px] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b p-5">
               <h2 className="text-lg font-bold">Settings</h2>
               <X

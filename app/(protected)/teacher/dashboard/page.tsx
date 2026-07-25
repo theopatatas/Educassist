@@ -11,6 +11,9 @@ import {
   MapPin,
   Layers3,
   GraduationCap,
+  Moon,
+  Sun,
+  Sunset,
 } from "lucide-react";
 
 type CalendarEvent = {
@@ -86,6 +89,12 @@ function getQuarterLabel(date = new Date()) {
   return "Quarter 4";
 }
 
+function getTimeGreeting(hour: number) {
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
 function formatGradeSection(
   gradeLevel?: string | null,
   sectionName?: string | null,
@@ -127,6 +136,10 @@ export default function TeacherDashboard() {
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dashboardNow] = useState(() => Date.now());
+  const currentHour = new Date(dashboardNow).getHours();
+  const greeting = getTimeGreeting(currentHour);
+  const GreetingIcon =
+    currentHour < 12 ? Sun : currentHour < 18 ? Sunset : Moon;
   const [selectedDateEvents, setSelectedDateEvents] =
     useState<SelectedDateEvents | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -382,29 +395,39 @@ export default function TeacherDashboard() {
 
   return (
     <div className="relative">
-      <div className="mx-auto max-w-7xl space-y-8 p-6">
-        <div className="flex flex-col justify-between gap-4 md:flex-row">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">
-              Welcome Teacher, {teacherName}
+      <div className="mx-auto max-w-7xl space-y-8 p-4 sm:p-6">
+        <section className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-slate-500">
+              Welcome back, Teacher
+            </p>
+            <h1
+              suppressHydrationWarning
+              className="mt-1 break-words text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl"
+            >
+              {greeting}, {teacherName}
             </h1>
-            <p className="text-gray-500">
+            <p className="mt-2 text-sm text-slate-600 sm:text-base">
               Here is your learning overview for today.
             </p>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-gradient-to-r from-blue-50 to-white px-3 py-1.5 text-sm font-semibold text-blue-700 shadow-sm">
+                <span className="h-2 w-2 rounded-full bg-blue-500" />
+                {syLabel}
+              </span>
+
+              <span className="inline-flex items-center gap-2 rounded-full border border-purple-200 bg-gradient-to-r from-purple-50 to-white px-3 py-1.5 text-sm font-semibold text-purple-700 shadow-sm">
+                <span className="h-2 w-2 rounded-full bg-purple-500" />
+                {quarterLabel}
+              </span>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-gradient-to-r from-blue-50 to-white px-3 py-1.5 text-sm font-semibold text-blue-700 shadow-sm">
-              <span className="h-2 w-2 rounded-full bg-blue-500" />
-              {syLabel}
-            </span>
-
-            <span className="inline-flex items-center gap-2 rounded-full border border-purple-200 bg-gradient-to-r from-purple-50 to-white px-3 py-1.5 text-sm font-semibold text-purple-700 shadow-sm">
-              <span className="h-2 w-2 rounded-full bg-purple-500" />
-              {quarterLabel}
-            </span>
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-amber-100 bg-amber-50 text-amber-600 shadow-sm">
+            <GreetingIcon className="h-7 w-7" />
           </div>
-        </div>
+        </section>
 
         <div className="space-y-8">
           <div className="space-y-8">

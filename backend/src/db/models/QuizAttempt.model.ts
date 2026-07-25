@@ -9,6 +9,7 @@ export class QuizAttempt extends Model {
   declare completedAt: Date | null;
   declare score: number;
   declare penaltyPoints: number;
+  declare remainingSeconds: number | null;
   declare createdAt: Date;
   declare updatedAt: Date;
 }
@@ -56,6 +57,11 @@ QuizAttempt.init(
       allowNull: false,
       defaultValue: 0,
       field: "penalty_points",
+    },
+    remainingSeconds: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      field: "remaining_seconds",
     },
   },
   {
