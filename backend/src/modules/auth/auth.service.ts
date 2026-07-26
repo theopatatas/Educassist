@@ -310,10 +310,22 @@ export async function loginUser(email: string, password: string) {
       details: null,
     });
   }
+  const studentProfile =
+    user.role === "STUDENT"
+      ? await Student.findOne({
+          where: { userId: user.id },
+          attributes: ["graduatedAt"],
+        })
+      : null;
 
   return {
     ok: true as const,
-    user: { id: user.id, email: user.email, role: user.role.toLowerCase() },
+    user: {
+      id: user.id,
+      email: user.email,
+      role: user.role.toLowerCase(),
+      graduated: Boolean(studentProfile?.graduatedAt),
+    },
     accessToken,
     refreshToken,
   };
@@ -356,10 +368,22 @@ export async function refreshUserSession(refreshToken: string) {
   const nextRefreshToken = signRefreshToken({ sub: String(user.id) });
   const refreshTokenHash = await bcrypt.hash(nextRefreshToken, 10);
   await user.update({ refreshTokenHash });
+  const studentProfile =
+    user.role === "STUDENT"
+      ? await Student.findOne({
+          where: { userId: user.id },
+          attributes: ["graduatedAt"],
+        })
+      : null;
 
   return {
     ok: true as const,
-    user: { id: user.id, email: user.email, role: user.role.toLowerCase() },
+    user: {
+      id: user.id,
+      email: user.email,
+      role: user.role.toLowerCase(),
+      graduated: Boolean(studentProfile?.graduatedAt),
+    },
     accessToken,
     refreshToken: nextRefreshToken,
   };

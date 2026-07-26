@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/src/lib/http/client";
+import AcademicDashboardBadges from "../../AcademicDashboardBadges";
 import {
   BookOpen,
   X,
@@ -14,6 +15,7 @@ import {
   Moon,
   Sun,
   Sunset,
+  CalendarOff,
 } from "lucide-react";
 
 type CalendarEvent = {
@@ -23,7 +25,14 @@ type CalendarEvent = {
   date: number;
   time: string;
   location: string;
-  type: "Quiz" | "Exam Schedule" | "Assignment";
+  type:
+    | "Quiz"
+    | "Exam Schedule"
+    | "Assignment"
+    | "Grade Encoding Deadline"
+    | "Meeting"
+    | "Holiday"
+    | "School Activity";
   color: string;
   sortTimestamp: number;
 };
@@ -72,22 +81,21 @@ type ApiAssignment = {
   sectionName?: string | null;
   gradeLevel?: string | null;
 };
-
-function getSchoolYearLabel(date = new Date()) {
-  const month = date.getMonth();
-  const year = date.getFullYear();
-  const startYear = month >= 7 ? year : year - 1;
-  const endYear = startYear + 1;
-  return `SY ${startYear}-${endYear}`;
-}
-
-function getQuarterLabel(date = new Date()) {
-  const m = date.getMonth();
-  if (m >= 7 && m <= 9) return "Quarter 1";
-  if (m === 10 || m === 11 || m === 0) return "Quarter 2";
-  if (m >= 1 && m <= 3) return "Quarter 3";
-  return "Quarter 4";
-}
+type ApiSchoolEvent = {
+  id: number;
+  title: string;
+  category: string;
+  eventDate: string;
+  startTime?: string | null;
+  location?: string | null;
+};
+type DashboardLeave = {
+  id: number;
+  leaveType: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+};
 
 function getTimeGreeting(hour: number) {
   if (hour < 12) return "Good morning";
@@ -129,10 +137,9 @@ function getStartDateTimeTimestamp(isoDate: string, time?: string | null) {
 
 export default function TeacherDashboard() {
   const router = useRouter();
-  const syLabel = getSchoolYearLabel();
-  const quarterLabel = getQuarterLabel();
   const [teacherName, setTeacherName] = useState("Teacher");
   const [teacherClasses, setTeacherClasses] = useState<ApiClass[]>([]);
+  const [teacherLeaves, setTeacherLeaves] = useState<DashboardLeave[]>([]);
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dashboardNow] = useState(() => Date.now());
@@ -164,7 +171,9 @@ export default function TeacherDashboard() {
     () => Math.ceil((firstDay + daysInMonth) / 7),
     [firstDay, daysInMonth],
   );
-  const panelHeight = useMemo(() => 160 + totalWeeks * 64, [totalWeeks]);
+  // Header, legend, weekday labels, and every calendar week must fit inside
+  // the fixed-height panel. The legend is kept outside the day-grid height.
+  const panelHeight = useMemo(() => 230 + totalWeeks * 64, [totalWeeks]);
 
   const monthLabel = useMemo(
     () =>
@@ -289,12 +298,32 @@ export default function TeacherDashboard() {
 
   useEffect(() => {
     let active = true;
+    api
+      .get("/api/leaves/teacher")
+      .then(({ data }) => {
+        if (active) {
+          setTeacherLeaves(
+            Array.isArray(data?.requests) ? data.requests : [],
+          );
+        }
+      })
+      .catch(() => {
+        if (active) setTeacherLeaves([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
     Promise.all([
       api.get("/api/exams/me"),
       api.get("/api/quizzes/me"),
       api.get("/api/assignments/me"),
+      api.get("/api/events"),
     ])
-      .then(([examsRes, quizzesRes, assignmentsRes]) => {
+      .then(([examsRes, quizzesRes, assignmentsRes, schoolEventsRes]) => {
         if (!active) return;
         const exams = Array.isArray(examsRes.data?.exams)
           ? (examsRes.data.exams as ApiExam[])
@@ -304,6 +333,9 @@ export default function TeacherDashboard() {
           : [];
         const assignments = Array.isArray(assignmentsRes.data?.assignments)
           ? (assignmentsRes.data.assignments as ApiAssignment[])
+          : [];
+        const schoolEvents = Array.isArray(schoolEventsRes.data?.events)
+          ? (schoolEventsRes.data.events as ApiSchoolEvent[])
           : [];
 
         const examEvents: CalendarEvent[] = exams.map((exam) => {
@@ -362,7 +394,46 @@ export default function TeacherDashboard() {
             };
           });
 
-        setEvents([...examEvents, ...quizEvents, ...assignmentEvents]);
+        const schoolCalendarEvents: CalendarEvent[] = schoolEvents.map((event) => {
+          const date = new Date(event.eventDate);
+          const type =
+            event.category === "Meeting"
+              ? "Meeting"
+              : event.category === "Holiday"
+                ? "Holiday"
+                : event.category === "School Activity"
+                  ? "School Activity"
+                  : "Grade Encoding Deadline";
+          const color =
+            type === "Meeting"
+              ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+              : type === "Holiday"
+                ? "bg-orange-100 text-orange-700 border-orange-200"
+                : type === "School Activity"
+                  ? "bg-yellow-100 text-yellow-700 border-yellow-200"
+                  : "bg-indigo-100 text-indigo-700 border-indigo-200";
+          return {
+            id: `school-event-${event.id}`,
+            title: event.title,
+            isoDate: event.eventDate,
+            date: date.getDate(),
+            time: event.startTime || event.category,
+            location: event.location || "Academic calendar",
+            type,
+            color,
+            sortTimestamp: getStartDateTimeTimestamp(
+              event.eventDate,
+              event.startTime,
+            ),
+          };
+        });
+
+        setEvents([
+          ...examEvents,
+          ...quizEvents,
+          ...assignmentEvents,
+          ...schoolCalendarEvents,
+        ]);
       })
       .catch(() => {
         if (active) setEvents([]);
@@ -411,16 +482,8 @@ export default function TeacherDashboard() {
               Here is your learning overview for today.
             </p>
 
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-gradient-to-r from-blue-50 to-white px-3 py-1.5 text-sm font-semibold text-blue-700 shadow-sm">
-                <span className="h-2 w-2 rounded-full bg-blue-500" />
-                {syLabel}
-              </span>
-
-              <span className="inline-flex items-center gap-2 rounded-full border border-purple-200 bg-gradient-to-r from-purple-50 to-white px-3 py-1.5 text-sm font-semibold text-purple-700 shadow-sm">
-                <span className="h-2 w-2 rounded-full bg-purple-500" />
-                {quarterLabel}
-              </span>
+            <div className="mt-4">
+              <AcademicDashboardBadges />
             </div>
           </div>
 
@@ -463,6 +526,49 @@ export default function TeacherDashboard() {
               })}
             </div>
           </div>
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-md">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+                  <CalendarOff className="h-5 w-5 text-violet-600" />
+                  Leave Overview
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Upcoming, current, and recently reviewed requests.
+                </p>
+              </div>
+              <button type="button" onClick={() => router.push("/teacher/leave-requests")} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50">
+                View Leave Requests
+              </button>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              {[
+                ["Upcoming Leave", teacherLeaves.filter((item) => item.status === "APPROVED").length, "text-blue-600"],
+                ["Current Leave", teacherLeaves.filter((item) => item.status === "ACTIVE_LEAVE").length, "text-violet-600"],
+                ["Pending", teacherLeaves.filter((item) => item.status === "PENDING").length, "text-amber-600"],
+                ["Rejected", teacherLeaves.filter((item) => item.status === "REJECTED").length, "text-rose-600"],
+                ["Completed", teacherLeaves.filter((item) => item.status === "COMPLETED").length, "text-emerald-600"],
+              ].map(([title, value, color]) => (
+                <div key={String(title)} className="rounded-xl bg-slate-50 p-3">
+                  <p className="text-xs font-medium text-slate-500">{String(title)}</p>
+                  <p className={`mt-1 text-2xl font-bold ${String(color)}`}>{Number(value)}</p>
+                </div>
+              ))}
+            </div>
+            {teacherLeaves.length ? (
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <p className="text-sm font-semibold text-slate-700">Recent Leave Requests</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {teacherLeaves.slice(0, 3).map((leave) => (
+                    <button key={leave.id} type="button" onClick={() => router.push("/teacher/leave-requests")} className="rounded-xl border border-slate-100 p-3 text-left hover:bg-slate-50">
+                      <p className="text-sm font-semibold">{leave.leaveType}</p>
+                      <p className="mt-1 text-xs text-slate-500">{leave.startDate} – {leave.endDate} · {leave.status.replaceAll("_", " ")}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </section>
           <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
             <div
               className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-md"
@@ -514,6 +620,31 @@ export default function TeacherDashboard() {
                 </div>
               </div>
 
+              <div className="shrink-0 border-b border-gray-200 bg-white px-4 py-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Event Legend
+                </p>
+                <div className="flex gap-3 overflow-x-auto pb-1 text-xs font-medium text-slate-600">
+                  {[
+                    ["Quiz", "bg-blue-500"],
+                    ["Exam", "bg-red-500"],
+                    ["Assignment", "bg-amber-500"],
+                    ["Grade Encoding", "bg-indigo-500"],
+                    ["Meeting", "bg-emerald-500"],
+                    ["Holiday", "bg-orange-500"],
+                    ["School Activity", "bg-yellow-400"],
+                  ].map(([label, color]) => (
+                    <span
+                      key={label}
+                      className="inline-flex shrink-0 items-center gap-1.5"
+                    >
+                      <span className={`h-2.5 w-2.5 rounded-full ${color}`} />
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
               <div className="shrink-0 grid grid-cols-7 border-b border-gray-200">
                 {calendarDays.map((day) => (
                   <div
@@ -526,7 +657,7 @@ export default function TeacherDashboard() {
               </div>
 
               <div
-                className="grid flex-1 grid-cols-7"
+                className="grid min-h-0 flex-1 grid-cols-7"
                 style={{
                   gridTemplateRows: `repeat(${totalWeeks}, minmax(64px, 1fr))`,
                 }}

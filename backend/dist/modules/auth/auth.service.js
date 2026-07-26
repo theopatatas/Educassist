@@ -231,9 +231,20 @@ async function loginUser(email, password) {
             details: null,
         });
     }
+    const studentProfile = user.role === "STUDENT"
+        ? await Student_model_1.Student.findOne({
+            where: { userId: user.id },
+            attributes: ["graduatedAt"],
+        })
+        : null;
     return {
         ok: true,
-        user: { id: user.id, email: user.email, role: user.role.toLowerCase() },
+        user: {
+            id: user.id,
+            email: user.email,
+            role: user.role.toLowerCase(),
+            graduated: Boolean(studentProfile?.graduatedAt),
+        },
         accessToken,
         refreshToken,
     };
@@ -273,9 +284,20 @@ async function refreshUserSession(refreshToken) {
     const nextRefreshToken = (0, jwt_1.signRefreshToken)({ sub: String(user.id) });
     const refreshTokenHash = await bcryptjs_1.default.hash(nextRefreshToken, 10);
     await user.update({ refreshTokenHash });
+    const studentProfile = user.role === "STUDENT"
+        ? await Student_model_1.Student.findOne({
+            where: { userId: user.id },
+            attributes: ["graduatedAt"],
+        })
+        : null;
     return {
         ok: true,
-        user: { id: user.id, email: user.email, role: user.role.toLowerCase() },
+        user: {
+            id: user.id,
+            email: user.email,
+            role: user.role.toLowerCase(),
+            graduated: Boolean(studentProfile?.graduatedAt),
+        },
         accessToken,
         refreshToken: nextRefreshToken,
     };

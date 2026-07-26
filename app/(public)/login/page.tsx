@@ -30,14 +30,19 @@ export default function LoginPage() {
   const [loginError, setLoginError] = useState("");
 
   useEffect(() => {
-    if (hydrated && user) router.replace(roleHome(user.role));
+    if (!hydrated || !user) return;
+    const destination = roleHome(user.role, Boolean(user.graduated));
+    if (user.role === "student" && user.graduated) {
+      window.location.replace(destination);
+      return;
+    }
+    router.replace(destination);
   }, [hydrated, user, router]);
 
   const onSubmit = async (values: FormValues) => {
     setLoginError("");
     try {
-      const res = await login(values.email, values.password);
-      router.replace(roleHome(res.user.role));
+      await login(values.email, values.password);
     } catch (err: unknown) {
       const error = err as AxiosError<{ message?: string }>;
       setLoginError(error.response?.data?.message || "Invalid email or password.");

@@ -34,6 +34,7 @@ export type SerializedEvent = {
 
 export async function listEvents(
   query: Record<string, unknown>,
+  audienceRole?: string,
 ): Promise<SerializedEvent[]> {
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Manila",
@@ -79,7 +80,14 @@ export async function listEvents(
   const creatorIds = [...new Set(events.map((event) => event.createdBy))];
   const creators = await User.findAll({
     where: { id: creatorIds },
-    attributes: ["id", "firstName", "lastName", "displayName", "email"],
+    attributes: [
+      "id",
+      "role",
+      "firstName",
+      "lastName",
+      "displayName",
+      "email",
+    ],
   });
   const byId = new Map(creators.map((user) => [String(user.id), user]));
   return events.map((event) => {
@@ -91,12 +99,39 @@ export async function listEvents(
         ? {
             id: Number(creator.id),
             name:
-              creator.displayName ||
-              [creator.firstName, creator.lastName].filter(Boolean).join(" ") ||
-              creator.email,
+              event.category === "Grade Encoding Deadline" &&
+              ["admin", "super_admin"].includes(
+                String(creator.role).toLowerCase(),
+              )
+                ? "Principal"
+                : creator.displayName ||
+                  [creator.firstName, creator.lastName]
+                    .filter(Boolean)
+                    .join(" ") ||
+                  creator.email,
           }
         : null,
     } as SerializedEvent;
+  }).filter((event) => {
+    if (!audienceRole || ["admin", "managed_admin"].includes(audienceRole))
+      return true;
+    const audience = event.targetAudience.trim().toLowerCase();
+    if (audience === "all users") return true;
+    if (audienceRole === "teacher")
+      return audience === "all teachers";
+    if (audienceRole === "student")
+      return audience === "all students" ||
+        audience === "grade level" ||
+        audience.startsWith("grade level:") ||
+        audience === "section" ||
+        audience.startsWith("section:");
+    if (audienceRole === "parent")
+      return audience === "all parents" ||
+        audience === "grade level" ||
+        audience.startsWith("grade level:") ||
+        audience === "section" ||
+        audience.startsWith("section:");
+    return false;
   });
 }
 

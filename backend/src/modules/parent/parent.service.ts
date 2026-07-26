@@ -2,7 +2,11 @@ import bcrypt from "bcryptjs";
 import { Op } from "sequelize";
 import { sequelize } from "../../config/db";
 import { Attendance } from "../../db/models/Attendance.model";
-import { calculateAttendancePercentage } from "../../utils/calculations";
+import {
+  calculateAttendancePercentage,
+  calculateFinalSubjectAverage,
+  calculateOverallStudentAverage,
+} from "../../utils/calculations";
 import { Class } from "../../db/models/Class.model";
 import { Exam } from "../../db/models/Exam.model";
 import { Grade } from "../../db/models/Grade.model";
@@ -11,6 +15,11 @@ import { Parent } from "../../db/models/Parent.model";
 import { QuizAttempt } from "../../db/models/QuizAttempt.model";
 import { Student } from "../../db/models/Student.model";
 import { User } from "../../db/models/User.model";
+import { getAcademicContext } from "../admin/settings.service";
+import {
+  getStudentAcademicRecordById,
+  getStudentAcademicSessionsById,
+} from "../student/student.service";
 
 export type CreateParentInput = {
   email: string;
@@ -84,7 +93,29 @@ export async function getParentByUserId(userId: string) {
   return Parent.findOne({ where: { userId } });
 }
 
+export async function getParentAcademicSessionsByUserId(userId: string) {
+  const parent = await Parent.findOne({ where: { userId } });
+  if (!parent) return null;
+  if (!parent.studentId) return [];
+  return getStudentAcademicSessionsById(String(parent.studentId));
+}
+
+export async function getParentAcademicRecordByUserId(
+  userId: string,
+  filter?: { academicYear?: string; gradeLevel?: string },
+) {
+  const parent = await Parent.findOne({ where: { userId } });
+  if (!parent) return null;
+  if (!parent.studentId) return { linkedStudent: false, record: null };
+  const record = await getStudentAcademicRecordById(
+    String(parent.studentId),
+    filter,
+  );
+  return { linkedStudent: true, record };
+}
+
 export async function getParentOverviewByUserId(userId: string) {
+  const academic = await getAcademicContext();
   const parent = await Parent.findOne({ where: { userId } });
   if (!parent) return null;
   if (!parent.studentId) {
@@ -250,6 +281,9 @@ export async function getParentOverviewByUserId(userId: string) {
       ? GradeItem.findAll({
           where: {
             classId: classIds,
+            ...(academic.currentSchoolYear
+              ? { academicYear: academic.currentSchoolYear }
+              : {}),
             name: { [Op.like]: "%|published" },
           },
           attributes: ["id", "name"],
@@ -346,6 +380,7 @@ export async function getParentOverviewByUserId(userId: string) {
   const scoreByItemId = new Map(
     gradeRows.map((row) => [Number(row.gradeItemId), Number(row.score ?? 0)]),
   );
+  const quarterlyScores = new Map<string, Map<string, number>>();
   for (const item of gradeItems) {
     const parts = String(item.name ?? "").split("|");
     if (parts.length < 2) continue;
@@ -364,7 +399,13 @@ export async function getParentOverviewByUserId(userId: string) {
     if (!quarter || !subjectKey) continue;
     const targetRow = gradeTable.find((row) => row.quarter === quarter);
     if (!targetRow) continue;
-    targetRow[subjectKey] = scoreByItemId.get(Number(item.id)) ?? 0;
+    const score = scoreByItemId.get(Number(item.id));
+    if (score === undefined) continue;
+    targetRow[subjectKey] = score;
+    const subjectScores =
+      quarterlyScores.get(subjectKey) ?? new Map<string, number>();
+    subjectScores.set(quarter, score);
+    quarterlyScores.set(subjectKey, subjectScores);
   }
   const publishedCount = gradeRows.length;
   const gradeAverage = publishedCount
@@ -373,6 +414,20 @@ export async function getParentOverviewByUserId(userId: string) {
           publishedCount,
       )
     : 0;
+  const finalSubjectAverages: Record<string, number> = {};
+  const finalCandidates: Array<number | null> = [];
+  for (const [subject, scores] of quarterlyScores) {
+    const values = [
+      scores.get("Quarter 1"),
+      scores.get("Quarter 2"),
+      scores.get("Quarter 3"),
+      scores.get("Quarter 4"),
+    ];
+    const average = calculateFinalSubjectAverage(values);
+    finalCandidates.push(average);
+    if (average !== null) finalSubjectAverages[subject] = average;
+  }
+  const overallAverage = calculateOverallStudentAverage(finalCandidates);
 
   return {
     linkedStudent: {
@@ -384,7 +439,12 @@ export async function getParentOverviewByUserId(userId: string) {
     attendance: { present, late, absent, rate: attendanceRate },
     quizzes: { submitted: quizSubmitted, averageScore: quizAverage },
     exams: { upcoming: upcomingExams, completed: completedExams },
-    grades: { average: gradeAverage, publishedCount },
+    grades: {
+      average: gradeAverage,
+      publishedCount,
+      finalSubjectAverages,
+      overallAverage,
+    },
     gradeTable,
   };
 }

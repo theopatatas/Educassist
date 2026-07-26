@@ -3,6 +3,7 @@ import {
   createStudent,
   deleteStudent,
   getStudentAcademicRecordById,
+  getStudentAcademicSessionsById,
   getStudentAttendanceHistoryById,
   getStudentDetailsById,
   getStudentOverviewById,
@@ -34,10 +35,26 @@ export async function getById(req: Request, res: Response) {
 }
 
 export async function academicRecord(req: Request, res: Response) {
-  const record = await getStudentAcademicRecordById(req.params.id);
+  const record = await getStudentAcademicRecordById(req.params.id, {
+    academicYear:
+      typeof req.query.academicYear === "string"
+        ? req.query.academicYear
+        : undefined,
+    gradeLevel:
+      typeof req.query.gradeLevel === "string"
+        ? req.query.gradeLevel
+        : undefined,
+  });
   if (!record)
     return res.status(404).json({ ok: false, message: "Student not found" });
   return res.json({ ok: true, record });
+}
+
+export async function academicSessions(req: Request, res: Response) {
+  const sessions = await getStudentAcademicSessionsById(req.params.id);
+  if (!sessions)
+    return res.status(404).json({ ok: false, message: "Student not found" });
+  return res.json({ ok: true, sessions });
 }
 
 export async function attendanceHistory(req: Request, res: Response) {

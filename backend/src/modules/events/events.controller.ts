@@ -73,7 +73,10 @@ function validate(
   return null;
 }
 export async function list(req: Request, res: Response) {
-  return res.json({ ok: true, events: await listEvents(req.query) });
+  return res.json({
+    ok: true,
+    events: await listEvents(req.query, String(req.user?.role ?? "")),
+  });
 }
 export async function create(req: Request, res: Response) {
   const value = body(req);
@@ -229,26 +232,66 @@ export async function dashboard(_req: Request, res: Response) {
 function currentUserId(req: Request) {
   return Number((req as Request & { user?: { sub?: string } }).user?.sub);
 }
+
+function gradeEncodingNotificationTitle(
+  eventTitle: string,
+  description?: string | null,
+) {
+  const activeQuarter = eventTitle.includes("End of School Year")
+    ? "End of School Year"
+    : eventTitle.match(/Quarter [1-4]/)?.[0] ?? "";
+  const encodedQuarter =
+    description?.match(/Encoding quarter: (Quarter [1-4])/i)?.[1] ?? "";
+  const previousQuarter =
+    encodedQuarter ||
+    (activeQuarter === "Quarter 2"
+      ? "Quarter 1"
+      : activeQuarter === "Quarter 3"
+        ? "Quarter 2"
+        : activeQuarter === "Quarter 4"
+          ? "Quarter 3"
+          : activeQuarter === "End of School Year"
+            ? "Quarter 4"
+            : "");
+  if (activeQuarter === "Quarter 4" && previousQuarter === "Quarter 4")
+    return "Principal set End of School Year Grade Encoding Deadline for Quarter 4 has started";
+  return previousQuarter
+    ? `Principal updated ${previousQuarter} to ${activeQuarter} Grade Encoding Deadline for ${previousQuarter} has started`
+    : `Principal created ${eventTitle}`;
+}
+
 export async function notifications(req: Request, res: Response) {
   const userId = currentUserId(req);
-  const events = (await listEvents({}))
+  const events = (await listEvents({}, String(req.user?.role ?? "")))
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
     .slice(0, 30);
   const eventIds = events.map((event) => Number(event.id));
   const reads = await EventNotificationRead.findAll({
     where: { userId, eventId: eventIds },
-    attributes: ["eventId"],
+    attributes: ["eventId", "dismissedAt"],
   });
   const readIds = new Set(reads.map((read) => Number(read.eventId)));
+  const dismissedIds = new Set(
+    reads
+      .filter((read) => Boolean(read.dismissedAt))
+      .map((read) => Number(read.eventId)),
+  );
   return res.json({
     ok: true,
     notifications: events
       .filter((event) => Number(event.createdBy) !== userId)
+      .filter((event) => !dismissedIds.has(Number(event.id)))
       .map((event) => ({
         id: Number(event.id),
-        title: `${event.creator?.name ?? "An administrator"} created ${event.title}`,
+        title:
+          event.category === "Grade Encoding Deadline"
+            ? gradeEncodingNotificationTitle(event.title, event.description)
+            : `${event.creator?.name ?? "An administrator"} created ${event.title}`,
         category: event.category,
-        occurredAt: event.createdAt,
+        occurredAt:
+          event.category === "Grade Encoding Deadline"
+            ? event.updatedAt
+            : event.createdAt,
         read: readIds.has(Number(event.id)),
         event,
       })),
@@ -272,6 +315,22 @@ export async function readAllNotifications(req: Request, res: Response) {
         where: { eventId: event.id, userId },
       }),
     ),
+  );
+  return res.json({ ok: true });
+}
+export async function clearAllNotifications(req: Request, res: Response) {
+  const userId = currentUserId(req);
+  const events = await SchoolEvent.findAll({
+    where: { createdBy: { [Op.ne]: userId } },
+    attributes: ["id"],
+  });
+  await Promise.all(
+    events.map(async (event) => {
+      const [read] = await EventNotificationRead.findOrCreate({
+        where: { eventId: event.id, userId },
+      });
+      await read.update({ dismissedAt: new Date() });
+    }),
   );
   return res.json({ ok: true });
 }

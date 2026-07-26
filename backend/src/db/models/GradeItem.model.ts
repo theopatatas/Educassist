@@ -8,6 +8,8 @@ export class GradeItem extends Model {
   declare weight: number;
   declare maxScore: number;
   declare dueDate: string | null;
+  declare academicYear: string | null;
+  declare gradeLevel: string | null;
 }
 
 GradeItem.init(
@@ -45,12 +47,25 @@ GradeItem.init(
       allowNull: true,
       field: "due_date",
     },
+    academicYear: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      field: "academic_year",
+    },
+    gradeLevel: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      field: "grade_level",
+    },
   },
   {
     sequelize,
     tableName: "grade_items",
     timestamps: true,
     underscored: true,
-    indexes: [{ fields: ["class_id"] }],
+    indexes: [
+      { fields: ["class_id"] },
+      { fields: ["class_id", "academic_year"] },
+    ],
   }
 );

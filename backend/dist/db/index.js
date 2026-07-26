@@ -25,6 +25,22 @@ const DEFAULT_SUBJECTS = [
     { name: "PE", code: "PE" },
     { name: "ESP", code: "ESP" },
 ];
+async function applyGradeItemPreSyncPatch() {
+    try {
+        const qi = db_1.sequelize.getQueryInterface();
+        const gradeItems = await qi.describeTable("grade_items");
+        if (!("academic_year" in gradeItems)) {
+            await qi.sequelize.query("ALTER TABLE `grade_items` ADD COLUMN `academic_year` VARCHAR(20) NULL AFTER `due_date`;");
+        }
+        if (!("grade_level" in gradeItems)) {
+            await qi.sequelize.query("ALTER TABLE `grade_items` ADD COLUMN `grade_level` VARCHAR(50) NULL AFTER `academic_year`;");
+            await qi.sequelize.query("UPDATE `grade_items` AS gi INNER JOIN `classes` AS c ON c.id = gi.class_id SET gi.grade_level = c.grade_level WHERE gi.grade_level IS NULL;");
+        }
+    }
+    catch {
+        // The table is created by sync during a first-time database setup.
+    }
+}
 async function applySchemaPatches() {
     try {
         const qi = db_1.sequelize.getQueryInterface();
@@ -53,6 +69,16 @@ async function applySchemaPatches() {
         }
         if (!("created_by_id" in users)) {
             await qi.sequelize.query("ALTER TABLE `users` ADD COLUMN `created_by_id` BIGINT UNSIGNED NULL AFTER `last_login_at`;");
+        }
+    }
+    catch {
+        // Ignore if table does not exist yet during first boot; sync will create it.
+    }
+    try {
+        const qi = db_1.sequelize.getQueryInterface();
+        const notificationReads = await qi.describeTable("event_notification_reads");
+        if (!("dismissed_at" in notificationReads)) {
+            await qi.sequelize.query("ALTER TABLE `event_notification_reads` ADD COLUMN `dismissed_at` DATETIME NULL AFTER `user_id`;");
         }
     }
     catch {
@@ -135,6 +161,20 @@ async function applySchemaPatches() {
         await qi.sequelize.query("ALTER TABLE `classes` MODIFY COLUMN `meeting_time` VARCHAR(100) NULL;");
         if (!("building_name" in classes)) {
             await qi.sequelize.query("ALTER TABLE `classes` ADD COLUMN `building_name` VARCHAR(120) NULL AFTER `grade_level`;");
+        }
+    }
+    catch {
+        // Ignore if table does not exist yet during first boot; sync will create it.
+    }
+    try {
+        const qi = db_1.sequelize.getQueryInterface();
+        const gradeItems = await qi.describeTable("grade_items");
+        if (!("academic_year" in gradeItems)) {
+            await qi.sequelize.query("ALTER TABLE `grade_items` ADD COLUMN `academic_year` VARCHAR(20) NULL AFTER `due_date`;");
+        }
+        if (!("grade_level" in gradeItems)) {
+            await qi.sequelize.query("ALTER TABLE `grade_items` ADD COLUMN `grade_level` VARCHAR(50) NULL AFTER `academic_year`;");
+            await qi.sequelize.query("UPDATE `grade_items` AS gi INNER JOIN `classes` AS c ON c.id = gi.class_id SET gi.grade_level = c.grade_level WHERE gi.grade_level IS NULL;");
         }
     }
     catch {
@@ -226,6 +266,9 @@ async function seedAdminUser() {
 }
 async function initializeDatabase(options) {
     await db_1.sequelize.authenticate();
+    // Existing installations need the new column before Sequelize synchronizes
+    // model indexes that reference it.
+    await applyGradeItemPreSyncPatch();
     // Avoid repeated ALTER operations that can duplicate indexes in MySQL.
     await db_1.sequelize.sync({ force: options?.force ?? false });
     await applySchemaPatches();

@@ -45,7 +45,38 @@ type SubjectKey = (typeof SUBJECTS)[number]["key"];
 type Term = "1st Grading" | "2nd Grading" | "3rd Grading" | "4th Grading";
 type TeacherClass = { id: number; name: string | null; gradeLevel: string | null; subjectName?: string | null };
 type ApiStudent = { id: number; firstName: string; lastName: string };
+type AcademicContext = {
+  currentSchoolYear: string;
+  currentQuarter: string;
+  gradeEncodingQuarter: string;
+  endOfSchoolYear: boolean;
+  gradeEncodingStartDate: string;
+  gradeEncodingDeadline: string;
+  gradeEncodingStatus: "OPEN" | "LOCKED" | "UNAVAILABLE";
+  gradePublishingStatus: "OPEN" | "LOCKED" | "UNAVAILABLE";
+};
+type AcademicSession = {
+  academicYear: string;
+  gradeLevel: string;
+  status: "Current" | "Completed";
+};
 const GRADE_FILTERS_STORAGE_KEY = "teacher-grade-portal-filters-v1";
+const TERMS: Term[] = [
+  "1st Grading",
+  "2nd Grading",
+  "3rd Grading",
+  "4th Grading",
+];
+
+function termForQuarter(quarter: string): Term | null {
+  const index = Number(quarter.replace(/\D/g, "")) - 1;
+  return TERMS[index] ?? null;
+}
+
+function quarterForTerm(term: Term) {
+  const index = TERMS.indexOf(term);
+  return index >= 0 ? `Quarter ${index + 1}` : term;
+}
 
 const SUBJECT_NAME_MAP: Record<string, SubjectKey> = {
   Math: "math",
@@ -128,6 +159,62 @@ export default function TeacherGradePortalPage() {
   const [toastMsg, setToastMsg] = useState("Saved");
   const [isPublished, setIsPublished] = useState(false);
   const [isStudentsLoading, setIsStudentsLoading] = useState(false);
+  const [academic, setAcademic] = useState<AcademicContext | null>(null);
+  const [academicSessions, setAcademicSessions] = useState<AcademicSession[]>(
+    [],
+  );
+  const [selectedSession, setSelectedSession] =
+    useState<AcademicSession | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const loadAcademic = () =>
+      api
+        .get("/api/admin/settings/academic-context")
+        .then(({ data }) => {
+          if (!active) return;
+          const context = data?.academic as AcademicContext;
+          setAcademic(context);
+          const activeTerm = termForQuarter(
+            context?.gradeEncodingQuarter ?? "",
+          );
+          if (activeTerm) setTerm(activeTerm);
+        })
+        .catch(() => {
+          if (active) setAcademic(null);
+        });
+    void loadAcademic();
+    window.addEventListener("educassist-academic-updated", loadAcademic);
+    return () => {
+      active = false;
+      window.removeEventListener("educassist-academic-updated", loadAcademic);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    api
+      .get("/api/classes/grades/me/sessions")
+      .then(({ data }) => {
+        if (!active) return;
+        const sessions = Array.isArray(data?.sessions)
+          ? (data.sessions as AcademicSession[])
+          : [];
+        setAcademicSessions(sessions);
+        const current =
+          sessions.find((session) => session.status === "Current") ??
+          sessions[0] ??
+          null;
+        setSelectedSession(current);
+        if (current) setSelectedGrade(current.gradeLevel);
+      })
+      .catch(() => {
+        if (active) setAcademicSessions([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -175,8 +262,13 @@ export default function TeacherGradePortalPage() {
       const key = grade.toLowerCase().replace(/\s+/g, " ").trim();
       if (!uniq.has(key)) uniq.set(key, grade);
     }
+    for (const session of academicSessions) {
+      const grade = session.gradeLevel.trim();
+      const key = grade.toLowerCase().replace(/\s+/g, " ").trim();
+      if (grade && !uniq.has(key)) uniq.set(key, grade);
+    }
     return ["All Grades", ...Array.from(uniq.values())];
-  }, [teacherClasses]);
+  }, [academicSessions, teacherClasses]);
   const subjectOptions = useMemo(
     () => ["all", ...SUBJECTS.map((s) => s.key)] as Array<"all" | SubjectKey>,
     []
@@ -189,6 +281,7 @@ export default function TeacherGradePortalPage() {
     if (selectedGrade !== "All Grades" && gradeOptions.includes(selectedGrade)) return selectedGrade;
     return gradeOptions[1] ?? "All Grades";
   }, [gradeOptions, selectedGrade]);
+  const isHistoricalSession = selectedSession?.status === "Completed";
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(
@@ -269,12 +362,12 @@ export default function TeacherGradePortalPage() {
       active = false;
       window.clearTimeout(loadingTimer);
     };
-  }, [filteredTeacherClasses]);
+  }, [filteredTeacherClasses, selectedSession?.academicYear]);
   useEffect(() => {
     if (effectiveSection === "All Sections" || effectiveGrade === "All Grades") {
       return;
     }
-    if (grades.length === 0) {
+    if (grades.length === 0 && !isHistoricalSession) {
       return;
     }
 
@@ -286,6 +379,7 @@ export default function TeacherGradePortalPage() {
           gradeLevel: effectiveGrade,
           subject,
           term,
+          academicYear: selectedSession?.academicYear,
         },
       });
 
@@ -307,15 +401,43 @@ export default function TeacherGradePortalPage() {
             scoreMaps.set(result.subject, scoreByStudentId);
             publishedBySubject.set(result.subject, Boolean(result.data?.published));
           }
-          setGrades((prev) =>
-            prev.map((student) => {
+          setGrades((prev) => {
+            const historicalStudents = new Map<number, string>();
+            for (const result of results) {
+              const rows = Array.isArray(result.data?.rows)
+                ? (result.data.rows as Array<{
+                    studentId: number;
+                    studentName?: string;
+                  }>)
+                : [];
+              for (const row of rows)
+                historicalStudents.set(
+                  Number(row.studentId),
+                  row.studentName || "Student",
+                );
+            }
+            const base = isHistoricalSession
+              ? Array.from(historicalStudents, ([id, name]) => ({
+                  id,
+                  name,
+                  math: 0,
+                  science: 0,
+                  english: 0,
+                  filipino: 0,
+                  mapeh: 0,
+                  ap: 0,
+                  tle: 0,
+                  values: 0,
+                }))
+              : prev;
+            return base.map((student) => {
               const next = { ...student };
               for (const subject of subjectsToLoad) {
                 next[subject] = scoreMaps.get(subject)?.get(student.id) ?? 0;
               }
               return next;
-            })
-          );
+            });
+          });
           const teacherSubjects = Array.from(editableSubjectKeys);
           setIsPublished(
             teacherSubjects.length > 0 &&
@@ -337,12 +459,32 @@ export default function TeacherGradePortalPage() {
           for (const row of rows) {
             scoreByStudentId.set(Number(row.studentId), Number(row.score) || 0);
           }
-          setGrades((prev) =>
-            prev.map((student) => ({
+          setGrades((prev) => {
+            const base =
+              isHistoricalSession && rows.length
+                ? rows.map((row) => ({
+                    id: Number(row.studentId),
+                    name:
+                      (
+                        row as {
+                          studentName?: string;
+                        }
+                      ).studentName || "Student",
+                    math: 0,
+                    science: 0,
+                    english: 0,
+                    filipino: 0,
+                    mapeh: 0,
+                    ap: 0,
+                    tle: 0,
+                    values: 0,
+                  }))
+                : prev;
+            return base.map((student) => ({
               ...student,
               [selectedSubject]: scoreByStudentId.get(student.id) ?? 0,
-            }))
-          );
+            }));
+          });
           setIsPublished(Boolean(data?.published));
         })
         .catch(() => {
@@ -353,7 +495,7 @@ export default function TeacherGradePortalPage() {
     return () => {
       active = false;
     };
-  }, [editableSubjectKeys, effectiveGrade, effectiveSection, grades.length, selectedSubject, term]);
+  }, [editableSubjectKeys, effectiveGrade, effectiveSection, grades.length, isHistoricalSession, selectedSession?.academicYear, selectedSubject, term]);
 
   const calcVisibleAverage = useCallback((s: StudentGrade) => {
     if (visibleSubjects.length === 0) return 0;
@@ -370,6 +512,15 @@ export default function TeacherGradePortalPage() {
     });
     return list;
   }, [calcVisibleAverage, grades, query, sortBy]);
+  const activeTerm = academic
+    ? termForQuarter(academic.gradeEncodingQuarter)
+    : null;
+  const isActiveTerm = Boolean(activeTerm && term === activeTerm);
+  const encodingOpen =
+    academic?.gradeEncodingStatus === "OPEN" &&
+    academic.gradePublishingStatus === "OPEN";
+  const canEditGrades =
+    !isHistoricalSession && isActiveTerm && encodingOpen && !isPublished;
 
   const dashboard = useMemo(() => {
     if (filteredAndSorted.length === 0) {
@@ -420,12 +571,25 @@ export default function TeacherGradePortalPage() {
     );
   };
 
-  const handlePublishToggle = () => {
+  const saveGrades = (publish: boolean) => {
     if (effectiveSection === "All Sections" || effectiveGrade === "All Grades") {
       flashToast("Select section and grade before publishing");
       return;
     }
-    const publish = !isPublished;
+    if (!isActiveTerm) {
+      flashToast(
+        `Only ${academic?.gradeEncodingQuarter || "the open encoding quarter"} can be edited`,
+      );
+      return;
+    }
+    if (!encodingOpen) {
+      flashToast("Grade encoding is currently locked");
+      return;
+    }
+    if (isPublished) {
+      flashToast("Published grades are locked");
+      return;
+    }
     if (selectedSubject === "all") {
       const subjectsToSave = Array.from(editableSubjectKeys);
       if (subjectsToSave.length === 0) {
@@ -450,16 +614,22 @@ export default function TeacherGradePortalPage() {
         .then(() => {
           setIsPublished(publish);
           flashToast(
-            publish ? "Grades published for all subjects" : "Grades set back to draft for all subjects"
+            publish ? "Grades published for all subjects" : "Draft grades saved for all subjects"
           );
         })
-        .catch(() => {
-          flashToast("Failed to publish grades for all subjects");
+        .catch((error: unknown) => {
+          const requestError = error as {
+            response?: { data?: { message?: string } };
+          };
+          flashToast(
+            requestError.response?.data?.message ||
+              "Failed to save grades for all subjects",
+          );
         });
       return;
     }
     if (!editableSubjectKeys.has(selectedSubject)) {
-      flashToast("You can only publish grades for subjects you teach");
+      flashToast("You can only save grades for subjects you teach");
       return;
     }
 
@@ -478,10 +648,15 @@ export default function TeacherGradePortalPage() {
       })
       .then(() => {
         setIsPublished(publish);
-        flashToast(publish ? "Grades published to students" : "Grades set back to draft");
+        flashToast(publish ? "Grades published to students" : "Draft grades saved");
       })
-      .catch(() => {
-        flashToast("Failed to publish grades");
+      .catch((error: unknown) => {
+        const requestError = error as {
+          response?: { data?: { message?: string } };
+        };
+        flashToast(
+          requestError.response?.data?.message || "Failed to save grades",
+        );
       });
   };
 
@@ -524,10 +699,96 @@ export default function TeacherGradePortalPage() {
       <div className="mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Teacher Gradebook</h1>
-          <p className="text-gray-500">Manage and record student grades • {term}</p>
+          <p className="text-gray-500">
+            Manage and record student grades • {quarterForTerm(term)}
+          </p>
         </div>
 
-        <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <label className="block text-sm font-semibold text-slate-700">
+            Academic Session
+            <select
+              value={
+                selectedSession
+                  ? `${selectedSession.academicYear}|${selectedSession.gradeLevel}`
+                  : ""
+              }
+              onChange={(event) => {
+                const session = academicSessions.find(
+                  (item) =>
+                    `${item.academicYear}|${item.gradeLevel}` ===
+                    event.target.value,
+                );
+                if (!session) return;
+                setSelectedSession(session);
+                setSelectedGrade(session.gradeLevel);
+                setGrades([]);
+              }}
+              className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 sm:max-w-md"
+            >
+              {academicSessions.length ? (
+                academicSessions.map((session) => (
+                  <option
+                    key={`${session.academicYear}-${session.gradeLevel}`}
+                    value={`${session.academicYear}|${session.gradeLevel}`}
+                  >
+                    {session.gradeLevel} • Academic Year{" "}
+                    {session.academicYear} • {session.status}
+                  </option>
+                ))
+              ) : (
+                <option value="">No academic sessions available</option>
+              )}
+            </select>
+          </label>
+          {isHistoricalSession ? (
+            <p className="mt-2 text-sm font-medium text-amber-700">
+              Completed academic sessions are read-only.
+            </p>
+          ) : null}
+        </div>
+
+        <div className="mt-6 grid gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-4">
+          <div>
+            <p className="text-sm text-indigo-600">Academic Year</p>
+            <p className="font-semibold text-slate-900">
+              {selectedSession?.academicYear ||
+                academic?.currentSchoolYear ||
+                "Not configured"}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-indigo-600">Active Quarter</p>
+            <p className="font-semibold text-slate-900">
+              {academic?.currentQuarter || "Not configured"}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-indigo-600">Encoding Deadline</p>
+            <p className="font-semibold text-slate-900">
+              {academic?.gradeEncodingDeadline
+                ? new Date(
+                    `${academic.gradeEncodingDeadline}T00:00:00`,
+                  ).toLocaleDateString()
+                : "Unavailable"}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-indigo-600">Encoding Status</p>
+            <p
+              className={`font-semibold ${
+                encodingOpen ? "text-emerald-700" : "text-rose-700"
+              }`}
+            >
+              {encodingOpen ? "Open" : "Locked"}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+          <p className="mb-4 text-sm font-semibold text-slate-700">
+            Grade Filters
+          </p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="relative min-w-0">
             <select
@@ -577,10 +838,31 @@ export default function TeacherGradePortalPage() {
               onChange={(e) => setTerm(e.target.value as Term)}
               className="h-10 w-full rounded-xl border border-gray-200 bg-white px-4 py-2 font-medium text-gray-700 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              <option value="1st Grading">1st Grading</option>
-              <option value="2nd Grading">2nd Grading</option>
-              <option value="3rd Grading">3rd Grading</option>
-              <option value="4th Grading">4th Grading</option>
+              {TERMS.map((gradingTerm, index) => {
+                const activeIndex = activeTerm
+                  ? TERMS.indexOf(activeTerm)
+                  : -1;
+                return (
+                  <option
+                    key={gradingTerm}
+                    value={gradingTerm}
+                    disabled={
+                      !isHistoricalSession &&
+                      activeIndex >= 0 &&
+                      index > activeIndex
+                    }
+                  >
+                    {`Quarter ${index + 1}`}
+                    {!isHistoricalSession &&
+                    activeIndex >= 0 &&
+                    index > activeIndex
+                      ? " (Unavailable)"
+                      : !isHistoricalSession && index < activeIndex
+                        ? " (Read only)"
+                        : ""}
+                  </option>
+                );
+              })}
             </select>
           </div>
           </div>
@@ -707,16 +989,20 @@ export default function TeacherGradePortalPage() {
                           min="0"
                           max="100"
                           value={student[subj.key]}
-                          disabled={isPublished || !editableSubjectKeys.has(subj.key)}
+                          disabled={!canEditGrades || !editableSubjectKeys.has(subj.key)}
                           onFocus={(e) => e.currentTarget.select()}
                           onClick={(e) => e.currentTarget.select()}
                           onChange={(e) => handleGradeChange(student.id, subj.key, e.target.value)}
                           className={`w-14 rounded-md bg-transparent py-1 text-center text-sm font-medium outline-none transition-all hover:bg-white focus:bg-white focus:ring-2 focus:ring-indigo-500 ${getGradeColor(student[subj.key])} ${
-                            isPublished || !editableSubjectKeys.has(subj.key) ? "cursor-not-allowed opacity-60" : ""
+                            !canEditGrades || !editableSubjectKeys.has(subj.key) ? "cursor-not-allowed opacity-60" : ""
                           }`}
                           title={
                             isPublished
-                              ? "Unpublish to edit grades"
+                              ? "Published grades are locked"
+                              : !isActiveTerm
+                                ? "Previous quarters are read only"
+                                : !encodingOpen
+                                  ? "Grade encoding is locked"
                               : !editableSubjectKeys.has(subj.key)
                               ? "You can only edit subjects you teach"
                               : "Edit grade"
@@ -739,15 +1025,15 @@ export default function TeacherGradePortalPage() {
         ) : null}
       </div>
 
-      <div className="mt-6 mb-10 flex justify-end">
+      <div className="mt-6 mb-10 flex flex-wrap justify-end gap-3">
         <button
-          onClick={handlePublishToggle}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2 font-medium text-white shadow-lg transition-colors ${
-            isPublished ? "bg-gray-900 shadow-gray-200 hover:bg-gray-800" : "bg-gray-700 shadow-gray-200 hover:bg-gray-800"
-          }`}
+          type="button"
+          disabled={!canEditGrades}
+          onClick={() => saveGrades(true)}
+          className="flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2 font-medium text-white shadow-lg shadow-gray-200 transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <ShieldCheck className="h-4 w-4" />
-          <span>{isPublished ? "Unpublish" : "Publish"}</span>
+          <span>{isPublished ? "Published and Locked" : "Publish Grades"}</span>
         </button>
       </div>
 

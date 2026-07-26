@@ -1,22 +1,31 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Bell, Menu, LogOut, Settings, UserCircle, X, GraduationCap } from "lucide-react";
+import { Menu, LogOut, Settings, UserCircle, X, GraduationCap } from "lucide-react";
 import type { AxiosError } from "axios";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/src/features/auth/hooks";
 import { api } from "@/src/lib/http/client";
+import EventNotifications from "./EventNotifications";
 
-type Notice = { id: number; title: string; time: string; read: boolean };
+const pageTitles: Record<string, string> = {
+  "/student/dashboard": "Dashboard",
+  "/student/classes": "My Classes",
+  "/student/quiz-center": "Quiz Center",
+  "/student/exam-hall": "Exam Schedule",
+  "/student/assignment": "Assignment",
+  "/student/grade-portal": "Grade Portal",
+  "/student/attendance": "Attendance",
+  "/student/reports": "Reports",
+};
 
 export default function StudentHeader() {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, logout } = useAuth();
-  const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [notifications, setNotifications] = useState<Notice[]>([]);
   const [sectionLabel, setSectionLabel] = useState("Not assigned");
   const [gradeLevelLabel, setGradeLevelLabel] = useState("Not assigned");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -38,15 +47,10 @@ export default function StudentHeader() {
     .slice(0, 2)
     .map((s) => s[0]?.toUpperCase())
     .join("");
-
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.read).length,
-    [notifications]
-  );
-
-  const markAsRead = (id: number) => {
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
-  };
+  const activePageTitle =
+    Object.entries(pageTitles).find(
+      ([href]) => pathname === href || pathname.startsWith(`${href}/`),
+    )?.[1] || "Student Portal";
 
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
@@ -102,76 +106,38 @@ export default function StudentHeader() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 h-16 bg-white/90 px-6 shadow-md backdrop-blur">
+      <header className="sticky top-0 z-30 h-16 bg-white/90 px-3 shadow-md backdrop-blur sm:px-4 lg:px-6">
         <div className="flex h-full items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Menu className="h-6 w-6 text-slate-500 md:hidden" />
+          <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+            <button
+              type="button"
+              onClick={() =>
+                window.dispatchEvent(new Event("educassist-student-menu"))
+              }
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 md:hidden"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
             <div className="flex items-center gap-2">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-slate-900 via-slate-700 to-slate-500 text-white">
                 <GraduationCap className="h-5 w-5" />
               </div>
-              <div className="leading-tight">
+              <div className="hidden leading-tight lg:block">
                 <span className="block text-xl font-extrabold text-slate-900">EducAssist</span>
                 <span className="block -mt-1 text-[11px] text-slate-500">Student Portal</span>
               </div>
             </div>
           </div>
 
-          <div className="hidden items-center gap-3 md:flex" />
+          <div className="flex min-w-0 flex-1 items-center px-2 sm:px-4 lg:px-8">
+            <h1 className="truncate text-base font-bold tracking-tight text-slate-900 sm:text-xl lg:text-2xl">
+              {activePageTitle}
+            </h1>
+          </div>
 
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <button
-                onClick={() => setShowNotifications((v) => !v)}
-                className="relative rounded-full p-2 hover:bg-slate-100"
-                aria-label="Open notifications"
-              >
-                <Bell className="h-5 w-5 text-slate-600" />
-                {unreadCount > 0 ? (
-                  <>
-                    <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500" />
-                    <span className="sr-only">{unreadCount} unread notifications</span>
-                  </>
-                ) : null}
-              </button>
-
-              {showNotifications ? (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
-                  <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-xl border bg-white shadow-xl">
-                    <div className="flex items-center justify-between border-b p-4 font-bold">
-                      <span>Notifications</span>
-                      {unreadCount > 0 ? (
-                        <span className="text-xs text-slate-500">{unreadCount} unread</span>
-                      ) : null}
-                    </div>
-                    {notifications.length === 0 ? (
-                      <div className="p-4 text-sm text-slate-600">No notifications yet.</div>
-                    ) : (
-                      notifications.map((n) => (
-                        <div
-                          key={n.id}
-                          onClick={() => markAsRead(n.id)}
-                          className={`cursor-pointer p-4 text-sm hover:bg-slate-50 ${
-                            !n.read ? "bg-slate-50" : ""
-                          }`}
-                          role="button"
-                          tabIndex={0}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <span className="text-slate-800">{n.title}</span>
-                            {!n.read ? (
-                              <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-slate-900" />
-                            ) : null}
-                          </div>
-                          <p className="mt-1 text-xs text-slate-500">{n.time}</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </>
-              ) : null}
-            </div>
+          <div className="flex shrink-0 items-center gap-1 sm:gap-3 lg:gap-4">
+            <EventNotifications eventHref="/student/dashboard" />
 
             <div className="relative">
               <button

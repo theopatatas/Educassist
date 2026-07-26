@@ -7,6 +7,8 @@ const parent_controller_1 = require("./parent.controller");
 const router = (0, express_1.Router)();
 router.get("/me", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("parent"), parent_controller_1.me);
 router.get("/overview", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("parent"), parent_controller_1.overview);
+router.get("/academic-sessions", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("parent"), parent_controller_1.academicSessions);
+router.get("/academic-record", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("parent"), parent_controller_1.academicRecord);
 router.get("/", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin"), parent_controller_1.list);
 router.get("/:id", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin"), parent_controller_1.getById);
 router.post("/", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin"), parent_controller_1.create);

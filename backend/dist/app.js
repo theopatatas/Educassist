@@ -26,6 +26,7 @@ const admin_reports_routes_1 = __importDefault(require("./modules/admin-reports/
 const protected_routes_1 = __importDefault(require("./routes/protected.routes"));
 const errorHandler_1 = __importDefault(require("./middleware/errorHandler"));
 const teacher_assistant_routes_1 = __importDefault(require("./modules/teacher-assistant/teacher-assistant.routes"));
+const leave_routes_1 = __importDefault(require("./modules/leave/leave.routes"));
 function createApp() {
     const app = (0, express_1.default)();
     const rawCorsOrigins = process.env.CORS_ORIGIN ?? "http://localhost:3000";
@@ -64,6 +65,7 @@ function createApp() {
     app.use("/api/admin-reports", admin_reports_routes_1.default);
     app.use("/api/ai", ai_routes_1.default);
     app.use("/api/teacher-assistant", teacher_assistant_routes_1.default);
+    app.use("/api/leaves", leave_routes_1.default);
     app.use("/api", protected_routes_1.default); // ✅ now GET /api/protected works
     app.use(errorHandler_1.default);
     return app;

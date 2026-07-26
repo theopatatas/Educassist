@@ -158,13 +158,14 @@ export default function StudentAssignmentPage() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl p-6">
-      <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+    <div className="mx-auto max-w-7xl p-3 sm:p-6">
+      <section className="mb-8 flex flex-col items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 md:flex-row md:items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">My Assignments</h1>
-          <p className="text-gray-500">View tasks, due dates, and your submissions</p>
+          <p className="text-sm font-medium text-slate-500">Student Learning</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">My Assignments</h1>
+          <p className="mt-2 text-sm text-slate-600 sm:text-base">View tasks, due dates, and your submissions</p>
         </div>
-      </div>
+      </section>
 
       {loadError ? (
         <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{loadError}</div>

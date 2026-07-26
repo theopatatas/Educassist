@@ -31,7 +31,7 @@ export default function ProtectedLayout({
       {showBaseHeader ? (
         <>
           <StudentHeader />
-          <main className="p-6">{children}</main>
+          <main className="p-3 sm:p-6">{children}</main>
         </>
       ) : (
         <main>{children}</main>

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateAttendancePercentage,
+  calculateFinalSubjectAverage,
+  calculateOverallStudentAverage,
   calculatePercentage,
   calculateQuizScore,
 } from "../../backend/src/utils/calculations";
@@ -29,5 +31,15 @@ describe("score calculations", () => {
   it("calculates attendance percentage safely", () => {
     expect(calculateAttendancePercentage(18, 20)).toBe(90);
     expect(calculateAttendancePercentage(0, 0)).toBe(0);
+  });
+
+  it("computes final subject and overall student averages", () => {
+    expect(calculateFinalSubjectAverage([88, 90, 92, 94])).toBe(91);
+    expect(calculateOverallStudentAverage([91, 87, 93])).toBe(90);
+  });
+
+  it("does not compute final averages from incomplete grades", () => {
+    expect(calculateFinalSubjectAverage([88, 90, null, 94])).toBeNull();
+    expect(calculateOverallStudentAverage([91, null, 93])).toBeNull();
   });
 });

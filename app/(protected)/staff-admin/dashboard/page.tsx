@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { api } from "@/src/lib/http/client";
+import AcademicDashboardBadges from "../../AcademicDashboardBadges";
 import {
   AdminMetricCard,
   AdminPanel,
@@ -47,6 +48,20 @@ type Overview = {
   upcomingEvents: EventRow[];
   calendarEvents: EventRow[];
 };
+type GradeProgress = {
+  academic: {
+    currentSchoolYear: string;
+    currentQuarter: string;
+    gradeEncodingDeadline: string;
+    gradeEncodingStatus: string;
+  };
+  totals: {
+    assignedClasses: number;
+    draftClasses: number;
+    publishedClasses: number;
+    missingClasses: number;
+  } | null;
+};
 const eventLegend = [
   { label: "Meeting", color: "bg-green-500", text: "text-green-700" },
   { label: "Holiday", color: "bg-orange-500", text: "text-orange-700" },
@@ -60,19 +75,32 @@ export default function StaffAdminDashboardPage() {
   const [month, setMonth] = useState(() => new Date());
   const [viewingEvent, setViewingEvent] = useState<EventRow | null>(null);
   const [viewingDate, setViewingDate] = useState<string | null>(null);
+  const [gradeProgress, setGradeProgress] = useState<GradeProgress | null>(
+    null,
+  );
   const load = () => {
     setLoading(true);
     setError(false);
-    api
-      .get("/api/events/dashboard")
-      .then(({ data: response }) => setData(response.overview))
+    Promise.all([
+      api.get("/api/events/dashboard"),
+      api.get("/api/admin/settings/academic/progress"),
+    ])
+      .then(([dashboardResponse, progressResponse]) => {
+        setData(dashboardResponse.data.overview);
+        setGradeProgress(progressResponse.data?.progress ?? null);
+      })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
   };
   useEffect(() => {
-    api
-      .get("/api/events/dashboard")
-      .then(({ data: response }) => setData(response.overview))
+    Promise.all([
+      api.get("/api/events/dashboard"),
+      api.get("/api/admin/settings/academic/progress"),
+    ])
+      .then(([dashboardResponse, progressResponse]) => {
+        setData(dashboardResponse.data.overview);
+        setGradeProgress(progressResponse.data?.progress ?? null);
+      })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, []);
@@ -191,6 +219,9 @@ export default function StaffAdminDashboardPage() {
           Students, attendance, meetings, holidays, and school activities in one
           view.
         </p>
+        <div className="mt-4">
+          <AcademicDashboardBadges />
+        </div>
       </section>
       {error ? (
         <div
@@ -217,6 +248,36 @@ export default function StaffAdminDashboardPage() {
           />
         ))}
       </div>
+      <AdminPanel
+        title="Grade Submission Progress"
+        description="Read-only status for the active academic quarter."
+      >
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="rounded-xl bg-slate-50 p-4">
+            <p className="text-xs text-slate-500">Active Period</p>
+            <p className="mt-1 font-semibold text-slate-900">
+              {gradeProgress?.academic.currentQuarter || "Unavailable"}
+            </p>
+          </div>
+          {[
+            ["Assigned", gradeProgress?.totals?.assignedClasses],
+            ["Published", gradeProgress?.totals?.publishedClasses],
+            ["Draft", gradeProgress?.totals?.draftClasses],
+            ["Missing", gradeProgress?.totals?.missingClasses],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-xl bg-slate-50 p-4">
+              <p className="text-xs text-slate-500">{label}</p>
+              <p className="mt-1 text-xl font-bold text-slate-900">
+                {value ?? "—"}
+              </p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-sm text-slate-500">
+          Deadline: {gradeProgress?.academic.gradeEncodingDeadline || "Unavailable"} · Status:{" "}
+          {gradeProgress?.academic.gradeEncodingStatus || "Unavailable"}
+        </p>
+      </AdminPanel>
       <div>
         <AdminPanel
           title="Academic Calendar"

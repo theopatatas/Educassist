@@ -32,7 +32,7 @@ export default function StudentLayout({
         const isGraduated = Boolean(data?.student?.graduatedAt);
         setGraduated(isGraduated);
         if (isGraduated && pathname !== "/student/grade-portal") {
-          router.replace("/student/grade-portal");
+          window.location.replace("/student/grade-portal");
         }
       })
       .catch(() => {

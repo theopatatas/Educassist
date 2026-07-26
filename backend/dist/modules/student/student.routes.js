@@ -8,6 +8,7 @@ const router = (0, express_1.Router)();
 router.get("/me", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("student"), student_controller_1.me);
 router.get("/", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin", "managed_admin", "teacher"), student_controller_1.list);
 router.get("/:id/overview", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin", "managed_admin"), student_controller_1.overview);
+router.get("/:id/academic-sessions", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin", "managed_admin"), student_controller_1.academicSessions);
 router.get("/:id/academic-record", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin", "managed_admin"), student_controller_1.academicRecord);
 router.get("/:id/attendance", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin", "managed_admin"), student_controller_1.attendanceHistory);
 router.get("/:id", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin", "managed_admin", "teacher"), student_controller_1.getById);

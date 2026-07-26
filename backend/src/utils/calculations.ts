@@ -24,3 +24,33 @@ export function calculateQuizScore(
 export function calculateAttendancePercentage(present: number, total: number) {
   return calculatePercentage(present, total);
 }
+
+export function calculateFinalSubjectAverage(
+  quarterlyGrades: Array<number | null | undefined>,
+) {
+  if (
+    quarterlyGrades.length !== 4 ||
+    quarterlyGrades.some(
+      (grade) => grade === null || grade === undefined || !Number.isFinite(grade),
+    )
+  ) {
+    return null;
+  }
+  return Math.round(
+    (quarterlyGrades as number[]).reduce((sum, grade) => sum + grade, 0) / 4,
+  );
+}
+
+export function calculateOverallStudentAverage(
+  finalSubjectAverages: Array<number | null | undefined>,
+) {
+  const grades = finalSubjectAverages.filter(
+    (grade): grade is number =>
+      grade !== null && grade !== undefined && Number.isFinite(grade),
+  );
+  if (!grades.length || grades.length !== finalSubjectAverages.length)
+    return null;
+  return Math.round(
+    grades.reduce((sum, grade) => sum + grade, 0) / grades.length,
+  );
+}

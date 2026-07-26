@@ -134,15 +134,16 @@ export default function StudentQuizCenterPage() {
   }, [quizzes, selectedSubject]);
 
   return (
-    <div className="mx-auto max-w-7xl p-6">
+    <div className="mx-auto max-w-7xl p-3 sm:p-6">
       {loadError ? (
         <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{loadError}</div>
       ) : null}
 
-      <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+      <section className="mb-8 flex flex-col items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 md:flex-row md:items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">My Quizzes</h1>
-          <p className="text-gray-500">Quizzes assigned by your teachers</p>
+          <p className="text-sm font-medium text-slate-500">Student Learning</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">My Quizzes</h1>
+          <p className="mt-2 text-sm text-slate-600 sm:text-base">Quizzes assigned by your teachers</p>
 
           <div className="mt-3 flex flex-wrap gap-2">
             <span className="rounded-full border border-green-100 bg-green-50 px-3 py-1 text-xs font-semibold text-green-700">Submitted: {stats.submitted}</span>
@@ -166,7 +167,7 @@ export default function StudentQuizCenterPage() {
           </select>
           <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
         </div>
-      </div>
+      </section>
 
       {isLoading ? <div className="mb-4 text-sm text-gray-500">Loading quizzes...</div> : null}
 

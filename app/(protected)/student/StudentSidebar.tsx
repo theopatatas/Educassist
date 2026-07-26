@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
@@ -78,12 +79,33 @@ export default function StudentSidebar({
   graduated?: boolean;
 }) {
   const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
   const visibleMenuItems = graduated
     ? menuItems.filter((item) => item.id === "grades")
     : menuItems;
 
+  useEffect(() => {
+    const openMenu = () => setMobileOpen(true);
+    window.addEventListener("educassist-student-menu", openMenu);
+    return () =>
+      window.removeEventListener("educassist-student-menu", openMenu);
+  }, []);
+
   return (
-    <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-64 shrink-0 overflow-y-auto border-r border-gray-200 bg-white md:flex md:flex-col">
+    <>
+      {mobileOpen ? (
+        <button
+          type="button"
+          aria-label="Close navigation menu"
+          onClick={() => setMobileOpen(false)}
+          className="fixed inset-x-0 bottom-0 top-16 z-40 bg-slate-950/35 md:hidden"
+        />
+      ) : null}
+      <aside
+        className={`fixed bottom-0 left-0 top-16 z-50 flex w-72 shrink-0 flex-col overflow-y-auto border-r border-gray-200 bg-white shadow-xl transition-transform duration-200 md:sticky md:h-[calc(100vh-4rem)] md:w-64 md:translate-x-0 md:shadow-none ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
       <div className="space-y-1 p-4">
         <p className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
           Menu
@@ -97,6 +119,7 @@ export default function StudentSidebar({
             <Link
               key={item.id}
               href={item.href}
+              onClick={() => setMobileOpen(false)}
               className={`relative flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
                 isActive
                   ? "bg-gray-100 text-gray-900"
@@ -113,6 +136,7 @@ export default function StudentSidebar({
           );
         })}
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

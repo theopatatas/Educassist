@@ -11,6 +11,7 @@ import {
   GraduationCap,
   ClipboardCheck,
   BarChart3,
+  CalendarOff,
   X,
 } from "lucide-react";
 
@@ -22,6 +23,7 @@ const menuItems = [
   { href: "/teacher/assignment", label: "Assignment", icon: ScrollText, color: "text-pink-500" },
   { href: "/teacher/grade-portal", label: "Grade Portal", icon: GraduationCap, color: "text-amber-500" },
   { href: "/teacher/attendance", label: "Attendance", icon: ClipboardCheck, color: "text-teal-500" },
+  { href: "/teacher/leave-requests", label: "Leave Requests", icon: CalendarOff, color: "text-violet-500" },
   { href: "/teacher/reports", label: "Reports", icon: BarChart3, color: "text-indigo-500" },
 ];
 

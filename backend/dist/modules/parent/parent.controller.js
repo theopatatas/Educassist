@@ -5,6 +5,8 @@ exports.list = list;
 exports.getById = getById;
 exports.me = me;
 exports.overview = overview;
+exports.academicSessions = academicSessions;
+exports.academicRecord = academicRecord;
 exports.update = update;
 exports.remove = remove;
 const Student_model_1 = require("../../db/models/Student.model");
@@ -51,6 +53,35 @@ async function overview(req, res) {
     if (data === null)
         return res.status(404).json({ ok: false, message: "Parent profile not found" });
     return res.json({ ok: true, overview: data });
+}
+async function academicSessions(req, res) {
+    const userId = req.user?.sub;
+    if (!userId)
+        return res.status(401).json({ ok: false, message: "Unauthorized" });
+    const sessions = await (0, parent_service_1.getParentAcademicSessionsByUserId)(userId);
+    if (sessions === null)
+        return res
+            .status(404)
+            .json({ ok: false, message: "Parent profile not found" });
+    return res.json({ ok: true, sessions });
+}
+async function academicRecord(req, res) {
+    const userId = req.user?.sub;
+    if (!userId)
+        return res.status(401).json({ ok: false, message: "Unauthorized" });
+    const data = await (0, parent_service_1.getParentAcademicRecordByUserId)(userId, {
+        academicYear: typeof req.query.academicYear === "string"
+            ? req.query.academicYear
+            : undefined,
+        gradeLevel: typeof req.query.gradeLevel === "string"
+            ? req.query.gradeLevel
+            : undefined,
+    });
+    if (data === null)
+        return res
+            .status(404)
+            .json({ ok: false, message: "Parent profile not found" });
+    return res.json({ ok: true, ...data });
 }
 async function update(req, res) {
     const parent = await (0, parent_service_1.updateParent)(req.params.id, req.body ?? {});

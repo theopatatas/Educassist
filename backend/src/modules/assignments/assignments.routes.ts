@@ -8,12 +8,16 @@ import {
   submitMyAssignment,
   updateMyAssignment,
 } from "./assignments.controller";
+import {
+  blockTakenOverAssignment,
+  blockTakenOverBodyClass,
+} from "../leave/takeover.middleware";
 
 const router = Router();
 
 router.get("/me", requireAuth, requireRole("teacher", "student"), listMyAssignments);
-router.post("/me", requireAuth, requireRole("teacher"), createMyAssignment);
-router.patch("/:id", requireAuth, requireRole("teacher"), updateMyAssignment);
+router.post("/me", requireAuth, requireRole("teacher"), blockTakenOverBodyClass, createMyAssignment);
+router.patch("/:id", requireAuth, requireRole("teacher"), blockTakenOverAssignment, updateMyAssignment);
 router.get("/:id/results", requireAuth, requireRole("teacher"), listMyAssignmentResults);
 router.post("/:id/submit", requireAuth, requireRole("student"), submitMyAssignment);
 

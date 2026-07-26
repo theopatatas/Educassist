@@ -64,6 +64,11 @@ type AcademicSubjectRecord = {
   quarter4: number | null;
   finalGrade: number | null;
 };
+type StudentAcademicSession = {
+  academicYear: string;
+  gradeLevel: string;
+  status: "Current" | "Completed";
+};
 type AttendanceHistoryRow = {
   id: number;
   date: string;
@@ -234,6 +239,11 @@ export default function AdminStudentsPage() {
   const [academicRecords, setAcademicRecords] = useState<
     AcademicSubjectRecord[]
   >([]);
+  const [academicSessions, setAcademicSessions] = useState<
+    StudentAcademicSession[]
+  >([]);
+  const [selectedAcademicSession, setSelectedAcademicSession] =
+    useState<StudentAcademicSession | null>(null);
   const [attendanceHistory, setAttendanceHistory] = useState<
     AttendanceHistoryRow[]
   >([]);
@@ -396,6 +406,8 @@ export default function AdminStudentsPage() {
   useEffect(() => {
     if (!activeStudent?.id) {
       setAcademicRecords([]);
+      setAcademicSessions([]);
+      setSelectedAcademicSession(null);
       setAttendanceHistory([]);
       return;
     }
@@ -406,6 +418,7 @@ export default function AdminStudentsPage() {
       api.get(`/api/students/${activeStudent.id}`),
       api.get(`/api/students/${activeStudent.id}/overview`),
       api.get(`/api/students/${activeStudent.id}/academic-record`),
+      api.get(`/api/students/${activeStudent.id}/academic-sessions`),
       api.get(`/api/students/${activeStudent.id}/attendance`),
     ])
       .then(
@@ -413,6 +426,7 @@ export default function AdminStudentsPage() {
           profileResponse,
           overviewResponse,
           academicResponse,
+          sessionsResponse,
           attendanceResponse,
         ]) => {
           if (!mounted) return;
@@ -437,6 +451,15 @@ export default function AdminStudentsPage() {
               ? academicResponse.data.record.subjects
               : [],
           );
+          const sessions = Array.isArray(sessionsResponse.data?.sessions)
+            ? (sessionsResponse.data.sessions as StudentAcademicSession[])
+            : [];
+          setAcademicSessions(sessions);
+          setSelectedAcademicSession(
+            sessions.find((session) => session.status === "Current") ??
+              sessions[0] ??
+              null,
+          );
           setAttendanceHistory(
             Array.isArray(attendanceResponse.data?.attendance)
               ? attendanceResponse.data.attendance
@@ -448,6 +471,8 @@ export default function AdminStudentsPage() {
         if (!mounted) return;
         setOverview(emptyStudentOverview);
         setAcademicRecords([]);
+        setAcademicSessions([]);
+        setSelectedAcademicSession(null);
         setAttendanceHistory([]);
         setDetailsError("Some student details could not be loaded.");
       })
@@ -458,6 +483,33 @@ export default function AdminStudentsPage() {
       mounted = false;
     };
   }, [activeStudent?.id]);
+
+  const loadAcademicSession = async (session: StudentAcademicSession) => {
+    if (!activeStudent?.id || detailsLoading) return;
+    setDetailsLoading(true);
+    setDetailsError("");
+    try {
+      const response = await api.get(
+        `/api/students/${activeStudent.id}/academic-record`,
+        {
+          params: {
+            academicYear: session.academicYear,
+            gradeLevel: session.gradeLevel,
+          },
+        },
+      );
+      setAcademicRecords(
+        Array.isArray(response.data?.record?.subjects)
+          ? response.data.record.subjects
+          : [],
+      );
+      setSelectedAcademicSession(session);
+    } catch {
+      setDetailsError("Academic records could not be loaded.");
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
 
   const progressSeries = useMemo(() => {
     const rows = overview.gradeTable?.length
@@ -1444,16 +1496,80 @@ export default function AdminStudentsPage() {
                       </svg>
                     </div>
                     <div>
-                      <div className="mb-3 flex items-center justify-between">
+                      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                         <div>
                           <h4 className="font-semibold text-slate-900">
                             Complete Academic Record
                           </h4>
+                          <p className="mt-1 text-sm text-slate-500">
+                            View the student&apos;s current and completed
+                            academic sessions.
+                          </p>
                         </div>
-                        <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
-                          {academicRecords.length} subjects
-                        </span>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                          <label className="min-w-0 text-sm font-medium text-slate-700 sm:min-w-72">
+                            Academic Session
+                            <select
+                              value={
+                                selectedAcademicSession
+                                  ? `${selectedAcademicSession.academicYear}|${selectedAcademicSession.gradeLevel}`
+                                  : ""
+                              }
+                              onChange={(event) => {
+                                const session = academicSessions.find(
+                                  (item) =>
+                                    `${item.academicYear}|${item.gradeLevel}` ===
+                                    event.target.value,
+                                );
+                                if (session) void loadAcademicSession(session);
+                              }}
+                              disabled={
+                                detailsLoading || academicSessions.length === 0
+                              }
+                              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-50"
+                            >
+                              {academicSessions.length === 0 ? (
+                                <option value="">
+                                  No academic sessions available
+                                </option>
+                              ) : null}
+                              {academicSessions.map((session) => (
+                                <option
+                                  key={`${session.academicYear}|${session.gradeLevel}`}
+                                  value={`${session.academicYear}|${session.gradeLevel}`}
+                                >
+                                  {session.gradeLevel} • Academic Year{" "}
+                                  {session.academicYear}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <div className="flex items-center gap-2 pb-0.5">
+                            {selectedAcademicSession ? (
+                              <span
+                                className={`rounded-full px-3 py-1.5 text-sm font-medium ${
+                                  selectedAcademicSession.status === "Current"
+                                    ? "bg-emerald-50 text-emerald-700"
+                                    : "bg-slate-100 text-slate-600"
+                                }`}
+                              >
+                                {selectedAcademicSession.status}
+                              </span>
+                            ) : null}
+                            <span className="whitespace-nowrap rounded-full bg-slate-100 px-3 py-1.5 text-sm text-slate-600">
+                              {academicRecords.length} subjects
+                            </span>
+                          </div>
+                        </div>
                       </div>
+                      {academicSessions.length > 0 &&
+                      !academicSessions.some(
+                        (session) => session.status === "Completed",
+                      ) ? (
+                        <p className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                          No previous academic sessions found.
+                        </p>
+                      ) : null}
                       <div className="overflow-x-auto rounded-xl border border-slate-200">
                         {detailsLoading ? (
                           <p className="p-6 text-center text-sm text-slate-500">

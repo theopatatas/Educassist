@@ -4,6 +4,7 @@ import { requireRole } from "../../middleware/role.middleware";
 import {
   create,
   academicRecord,
+  academicSessions,
   attendanceHistory,
   getById,
   list,
@@ -20,6 +21,12 @@ const router = Router();
 router.get("/me", requireAuth, requireRole("student"), me);
 router.get("/", requireAuth, requireRole("admin", "managed_admin", "teacher"), list);
 router.get("/:id/overview", requireAuth, requireRole("admin", "managed_admin"), overview);
+router.get(
+  "/:id/academic-sessions",
+  requireAuth,
+  requireRole("admin", "managed_admin"),
+  academicSessions,
+);
 router.get(
   "/:id/academic-record",
   requireAuth,

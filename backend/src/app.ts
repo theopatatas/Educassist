@@ -21,6 +21,7 @@ import adminReportsRoutes from "./modules/admin-reports/admin-reports.routes";
 import protectedRoutes from "./routes/protected.routes";
 import errorHandler from "./middleware/errorHandler";
 import teacherAssistantRoutes from "./modules/teacher-assistant/teacher-assistant.routes";
+import leaveRoutes from "./modules/leave/leave.routes";
 
 export function createApp() {
   const app = express();
@@ -63,6 +64,7 @@ export function createApp() {
   app.use("/api/admin-reports", adminReportsRoutes);
   app.use("/api/ai", aiRoutes);
   app.use("/api/teacher-assistant", teacherAssistantRoutes);
+  app.use("/api/leaves", leaveRoutes);
   app.use("/api", protectedRoutes); // ✅ now GET /api/protected works
 
   app.use(errorHandler);

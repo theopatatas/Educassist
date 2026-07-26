@@ -2,7 +2,15 @@
 
 import React, { useEffect, useState } from "react";
 import { api } from "@/src/lib/http/client";
-import { Users, Clock, MapPin, X, Calendar, Building2 } from "lucide-react";
+import {
+  BookOpen,
+  Users,
+  Clock,
+  MapPin,
+  X,
+  Calendar,
+  Building2,
+} from "lucide-react";
 
 type ApiClass = {
   id: number;
@@ -112,13 +120,21 @@ export default function StudentClassesPage() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-7xl p-6">
-      <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+    <div className="mx-auto max-w-7xl p-3 sm:p-6">
+      <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">My Classes</h1>
-          <p className="text-gray-500">Classes are automatically assigned from your grade level and section.</p>
+          <p className="text-sm font-medium text-slate-500">
+            Student Learning
+          </p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            My Classes
+          </h1>
+          <p className="mt-2 text-sm text-slate-600 sm:text-base">
+            Classes are automatically assigned from your grade level and
+            section.
+          </p>
         </div>
-      </div>
+      </section>
 
       {loadError ? (
         <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{loadError}</div>
@@ -134,11 +150,21 @@ export default function StudentClassesPage() {
           <div
             key={cls.id}
             onClick={() => setSelectedClass(cls)}
-            className="cursor-pointer rounded-2xl bg-white shadow-sm transition-all hover:-translate-y-1 hover:shadow-md"
+            className="group cursor-pointer overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all hover:-translate-y-1 hover:shadow-md"
           >
+            <div className={`h-1.5 ${cls.color}`} />
             <div className="p-6">
-              <div className="mb-4">
-                <span className={`rounded-full px-3 py-1 text-xs font-bold ${cls.lightColor} ${cls.textColor}`}>{cls.subject}</span>
+              <div className="mb-4 flex items-center gap-3">
+                <div
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-current/10 ${cls.lightColor} ${cls.textColor}`}
+                >
+                  <BookOpen className="h-5 w-5" />
+                </div>
+                <span
+                  className={`min-w-0 truncate rounded-full px-3 py-1 text-xs font-bold ${cls.lightColor} ${cls.textColor}`}
+                >
+                  {cls.subject}
+                </span>
               </div>
 
               <h3 className="mb-1 text-xl font-bold text-gray-800">{formatGradeSection(cls.gradeLevel, cls.name)}</h3>
@@ -147,20 +173,20 @@ export default function StudentClassesPage() {
               </p>
 
               <div className="mb-4 flex items-center gap-2 text-sm text-gray-500">
-                <MapPin className="h-4 w-4" />
+                <MapPin className={`h-4 w-4 ${cls.textColor}`} />
                 <span>{cls.building} - {cls.room}</span>
               </div>
 
               <div className="space-y-3">
                 <div className="flex items-center gap-3 text-sm text-gray-600">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-50 text-gray-400">
+                  <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${cls.lightColor} ${cls.textColor}`}>
                     <Calendar className="h-4 w-4" />
                   </div>
                   <span className="font-medium">{cls.day || "TBA"}</span>
                 </div>
 
                 <div className="flex items-center gap-3 text-sm text-gray-600">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-50 text-gray-400">
+                  <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${cls.lightColor} ${cls.textColor}`}>
                     <Clock className="h-4 w-4" />
                   </div>
                   <span className="font-medium">{cls.time || "TBA"}</span>

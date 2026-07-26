@@ -12,6 +12,7 @@ import {
   Settings,
   X,
   ChartNoAxesCombined,
+  CalendarClock,
 } from "lucide-react";
 
 const items = [
@@ -32,6 +33,12 @@ const items = [
     label: "Teacher Management",
     icon: UserSquare2,
     iconColor: "text-orange-500",
+  },
+  {
+    href: "/admin/leave-management",
+    label: "Leave Management",
+    icon: CalendarClock,
+    iconColor: "text-violet-500",
   },
   {
     href: "/admin/students",

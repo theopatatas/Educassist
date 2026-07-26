@@ -5,6 +5,8 @@ import {
   deleteParent,
   getParentById,
   getParentOverviewByUserId,
+  getParentAcademicRecordByUserId,
+  getParentAcademicSessionsByUserId,
   getParentByUserId,
   listParents,
   updateParent,
@@ -52,6 +54,39 @@ export async function overview(req: Request, res: Response) {
   const data = await getParentOverviewByUserId(userId);
   if (data === null) return res.status(404).json({ ok: false, message: "Parent profile not found" });
   return res.json({ ok: true, overview: data });
+}
+
+export async function academicSessions(req: Request, res: Response) {
+  const userId = req.user?.sub;
+  if (!userId)
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  const sessions = await getParentAcademicSessionsByUserId(userId);
+  if (sessions === null)
+    return res
+      .status(404)
+      .json({ ok: false, message: "Parent profile not found" });
+  return res.json({ ok: true, sessions });
+}
+
+export async function academicRecord(req: Request, res: Response) {
+  const userId = req.user?.sub;
+  if (!userId)
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  const data = await getParentAcademicRecordByUserId(userId, {
+    academicYear:
+      typeof req.query.academicYear === "string"
+        ? req.query.academicYear
+        : undefined,
+    gradeLevel:
+      typeof req.query.gradeLevel === "string"
+        ? req.query.gradeLevel
+        : undefined,
+  });
+  if (data === null)
+    return res
+      .status(404)
+      .json({ ok: false, message: "Parent profile not found" });
+  return res.json({ ok: true, ...data });
 }
 
 export async function update(req: Request, res: Response) {

@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createStudent = createStudent;
 exports.listStudents = listStudents;
 exports.getStudentDetailsById = getStudentDetailsById;
+exports.getStudentAcademicSessionsById = getStudentAcademicSessionsById;
 exports.getStudentAcademicRecordById = getStudentAcademicRecordById;
 exports.getStudentAttendanceHistoryById = getStudentAttendanceHistoryById;
 exports.getStudentById = getStudentById;
@@ -28,6 +29,7 @@ const Section_model_1 = require("../../db/models/Section.model");
 const Student_model_1 = require("../../db/models/Student.model");
 const Subject_model_1 = require("../../db/models/Subject.model");
 const User_model_1 = require("../../db/models/User.model");
+const settings_service_1 = require("../admin/settings.service");
 async function ensureGuardianAccountForStudent(input, studentId, transaction) {
     const guardianContact = input.guardianContact?.trim();
     if (!guardianContact)
@@ -237,45 +239,104 @@ async function getStudentDetailsById(id) {
         parent: parent?.toJSON() ?? null,
     };
 }
-async function getStudentAcademicRecordById(id) {
+async function getStudentAcademicSessionsById(id) {
     const student = await Student_model_1.Student.findByPk(id);
     if (!student)
         return null;
-    const classes = student.sectionId && student.yearLevel
-        ? await Class_model_1.Class.findAll({
+    const academic = await (0, settings_service_1.getAcademicContext)();
+    const grades = await Grade_model_1.Grade.findAll({
+        where: { studentId: student.id },
+        attributes: ["gradeItemId"],
+    });
+    const itemIds = grades.map((grade) => Number(grade.gradeItemId));
+    const items = itemIds.length
+        ? await GradeItem_model_1.GradeItem.findAll({
             where: {
-                sectionId: student.sectionId,
-                gradeLevel: student.yearLevel,
+                id: itemIds,
+                academicYear: { [sequelize_1.Op.ne]: null },
+                name: { [sequelize_1.Op.like]: "%|published" },
+            },
+            attributes: ["classId", "academicYear", "gradeLevel"],
+        })
+        : [];
+    const classIds = [...new Set(items.map((item) => Number(item.classId)))];
+    const classes = classIds.length
+        ? await Class_model_1.Class.findAll({
+            where: { id: classIds },
+            attributes: ["id", "gradeLevel"],
+        })
+        : [];
+    const gradeByClass = new Map(classes.map((item) => [Number(item.id), item.gradeLevel]));
+    const sessions = new Map();
+    for (const item of items) {
+        const academicYear = String(item.academicYear ?? "").trim();
+        const gradeLevel = String(item.gradeLevel ?? gradeByClass.get(Number(item.classId)) ?? "").trim();
+        if (!academicYear || !gradeLevel)
+            continue;
+        const current = academicYear === academic.currentSchoolYear &&
+            gradeLevel === String(student.yearLevel ?? "");
+        sessions.set(`${academicYear}|${gradeLevel}`, {
+            academicYear,
+            gradeLevel,
+            status: current ? "Current" : "Completed",
+        });
+    }
+    if (academic.currentSchoolYear && student.yearLevel) {
+        sessions.set(`${academic.currentSchoolYear}|${student.yearLevel}`, {
+            academicYear: academic.currentSchoolYear,
+            gradeLevel: student.yearLevel,
+            status: "Current",
+        });
+    }
+    return Array.from(sessions.values()).sort((left, right) => {
+        if (left.status !== right.status)
+            return left.status === "Current" ? -1 : 1;
+        const leftYear = Number(left.academicYear.match(/\d{4}/)?.[0] ?? 0);
+        const rightYear = Number(right.academicYear.match(/\d{4}/)?.[0] ?? 0);
+        return rightYear - leftYear;
+    });
+}
+async function getStudentAcademicRecordById(id, filter) {
+    const academic = await (0, settings_service_1.getAcademicContext)();
+    const student = await Student_model_1.Student.findByPk(id);
+    if (!student)
+        return null;
+    const academicYear = filter?.academicYear?.trim() || academic.currentSchoolYear;
+    const gradeLevel = filter?.gradeLevel?.trim() || student.yearLevel || "";
+    const allGrades = await Grade_model_1.Grade.findAll({ where: { studentId: student.id } });
+    const allItemIds = allGrades.map((grade) => Number(grade.gradeItemId));
+    const candidates = allItemIds.length && academicYear
+        ? await GradeItem_model_1.GradeItem.findAll({
+            where: {
+                id: allItemIds,
+                academicYear,
+                name: { [sequelize_1.Op.like]: "%|published" },
             },
         })
         : [];
-    const classIds = classes.map((row) => Number(row.id));
+    const classIds = [...new Set(candidates.map((item) => Number(item.classId)))];
+    const classes = classIds.length
+        ? await Class_model_1.Class.findAll({ where: { id: classIds } })
+        : [];
+    const classById = new Map(classes.map((row) => [Number(row.id), row]));
+    const items = candidates.filter((item) => {
+        const itemGrade = item.gradeLevel ?? classById.get(Number(item.classId))?.gradeLevel;
+        return !gradeLevel || itemGrade === gradeLevel;
+    });
+    const selectedItemIds = new Set(items.map((item) => Number(item.id)));
+    const grades = allGrades.filter((grade) => selectedItemIds.has(Number(grade.gradeItemId)));
+    const selectedClassIds = new Set(items.map((item) => Number(item.classId)));
     const subjectIds = classes
+        .filter((row) => selectedClassIds.has(Number(row.id)))
         .map((row) => Number(row.subjectId))
         .filter(Boolean);
-    const [subjects, items] = await Promise.all([
-        subjectIds.length
-            ? Subject_model_1.Subject.findAll({
-                where: { id: subjectIds },
-                attributes: ["id", "name", "code"],
-            })
-            : [],
-        classIds.length
-            ? GradeItem_model_1.GradeItem.findAll({
-                where: { classId: classIds, name: { [sequelize_1.Op.like]: "%|published" } },
-            })
-            : [],
-    ]);
-    const grades = items.length
-        ? await Grade_model_1.Grade.findAll({
-            where: {
-                studentId: student.id,
-                gradeItemId: items.map((item) => Number(item.id)),
-            },
+    const subjects = subjectIds.length
+        ? await Subject_model_1.Subject.findAll({
+            where: { id: subjectIds },
+            attributes: ["id", "name", "code"],
         })
         : [];
     const subjectById = new Map(subjects.map((subject) => [Number(subject.id), subject]));
-    const classById = new Map(classes.map((row) => [Number(row.id), row]));
     const scoreByItemId = new Map(grades.map((grade) => [Number(grade.gradeItemId), Number(grade.score)]));
     const records = new Map();
     for (const subject of subjects) {
@@ -313,7 +374,26 @@ async function getStudentAcademicRecordById(id) {
         else if (/final/i.test(term))
             record.finalGrade = score;
     }
-    return { subjects: Array.from(records.values()) };
+    const academicRecords = Array.from(records.values()).map((record) => ({
+        ...record,
+        finalGrade: record.finalGrade ??
+            (0, calculations_1.calculateFinalSubjectAverage)([
+                record.quarter1,
+                record.quarter2,
+                record.quarter3,
+                record.quarter4,
+            ]),
+    }));
+    return {
+        academicYear: academicYear || null,
+        gradeLevel: gradeLevel || null,
+        status: academicYear === academic.currentSchoolYear &&
+            gradeLevel === String(student.yearLevel ?? "")
+            ? "Current"
+            : "Completed",
+        subjects: academicRecords,
+        overallAverage: (0, calculations_1.calculateOverallStudentAverage)(academicRecords.map((record) => record.finalGrade)),
+    };
 }
 async function getStudentAttendanceHistoryById(id) {
     const student = await Student_model_1.Student.findByPk(id);
@@ -386,6 +466,7 @@ function normalizeText(value) {
         .toLowerCase();
 }
 async function getStudentOverviewById(id) {
+    const academic = await (0, settings_service_1.getAcademicContext)();
     const student = await Student_model_1.Student.findByPk(id);
     if (!student)
         return null;
@@ -420,6 +501,9 @@ async function getStudentOverviewById(id) {
             ? GradeItem_model_1.GradeItem.findAll({
                 where: {
                     classId: classIds,
+                    ...(academic.currentSchoolYear
+                        ? { academicYear: academic.currentSchoolYear }
+                        : {}),
                     name: { [sequelize_1.Op.like]: "%|published" },
                 },
                 attributes: ["id", "name"],

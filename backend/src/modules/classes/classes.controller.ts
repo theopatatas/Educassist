@@ -3,6 +3,8 @@ import {
   createClassForTeacher,
   deleteClassForTeacher,
   getPublishedGradesForStudent,
+  getAcademicSessionsForStudent,
+  getAcademicSessionsForTeacher,
   getPublishedGradesForTeacher,
   getClassFormOptionsForTeacher,
   listAttendanceForStudent,
@@ -122,9 +124,16 @@ export async function getMyGrades(req: Request, res: Response) {
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
 
   if (role === "student") {
-    const rows = await getPublishedGradesForStudent(userId, { term: req.query.term as string | undefined });
-    if (!rows) return res.status(404).json({ ok: false, message: "Student profile not found" });
-    return res.json({ ok: true, rows });
+    const result = await getPublishedGradesForStudent(userId, {
+      term: req.query.term as string | undefined,
+      academicYear: req.query.academicYear as string | undefined,
+      gradeLevel: req.query.gradeLevel as string | undefined,
+    });
+    if (!result)
+      return res
+        .status(404)
+        .json({ ok: false, message: "Student profile not found" });
+    return res.json({ ok: true, ...result });
   }
 
   const rows = await getPublishedGradesForTeacher(userId, {
@@ -132,9 +141,32 @@ export async function getMyGrades(req: Request, res: Response) {
     gradeLevel: req.query.gradeLevel as string | undefined,
     subject: req.query.subject as string | undefined,
     term: req.query.term as string | undefined,
+    academicYear: req.query.academicYear as string | undefined,
   });
   if (rows === null) return res.status(404).json({ ok: false, message: "Teacher profile not found" });
-  return res.json({ ok: true, rows: rows.rows, published: rows.published });
+  return res.json({
+    ok: true,
+    rows: rows.rows,
+    published: rows.published,
+    academic: rows.academic,
+    academicYear: rows.academicYear ?? rows.academic.currentSchoolYear,
+    sessionStatus: rows.sessionStatus ?? "Current",
+  });
+}
+
+export async function getMyAcademicSessions(req: Request, res: Response) {
+  const userId = req.user?.sub;
+  if (!userId)
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  const sessions =
+    req.user?.role === "teacher"
+      ? await getAcademicSessionsForTeacher(userId)
+      : await getAcademicSessionsForStudent(userId);
+  if (!sessions)
+    return res
+      .status(404)
+      .json({ ok: false, message: "Student profile not found" });
+  return res.json({ ok: true, sessions });
 }
 
 export async function publishMyGrades(req: Request, res: Response) {
@@ -155,5 +187,9 @@ export async function publishMyGrades(req: Request, res: Response) {
   });
   if (saved === null) return res.status(404).json({ ok: false, message: "Teacher profile not found" });
   if (saved === false) return res.status(404).json({ ok: false, message: "Class not found for selected filters" });
+  if (typeof saved === "object")
+    return res
+      .status(saved.status)
+      .json({ ok: false, message: saved.error });
   return res.json({ ok: true, saved });
 }

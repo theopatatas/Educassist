@@ -121,17 +121,18 @@ export default function StudentReportsPage() {
   const needsFocusCount = focusList.length;
 
   return (
-    <div className="mx-auto max-w-7xl p-6">
-      <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+    <div className="mx-auto max-w-7xl p-3 sm:p-6">
+      <section className="mb-8 flex flex-col items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 md:flex-row md:items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">My Reports</h1>
-          <p className="text-gray-500">Insights into your progress and performance</p>
+          <p className="text-sm font-medium text-slate-500">Student Learning</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">My Reports</h1>
+          <p className="mt-2 text-sm text-slate-600 sm:text-base">Insights into your progress and performance</p>
         </div>
         <button className="flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 font-medium text-gray-600 transition-colors hover:bg-gray-50">
           <Download className="h-4 w-4" />
           Export My Report
         </button>
-      </div>
+      </section>
 
       <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-3">
         <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">

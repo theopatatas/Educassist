@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/src/lib/http/client";
+import AcademicDashboardBadges from "../../AcademicDashboardBadges";
 import {
   TrendingUp,
   Users,
@@ -13,6 +14,9 @@ import {
   ChevronLeft,
   ChevronRight,
   MapPin,
+  Moon,
+  Sun,
+  Sunset,
 } from "lucide-react";
 
 type SubjectProgress = {
@@ -44,7 +48,16 @@ type CalendarEvent = {
   date: number;
   time: string;
   location: string;
-  type: "Quiz" | "Exam Schedule" | "Assignment";
+  type:
+    | "Quiz"
+    | "Exam Schedule"
+    | "Assignment"
+    | "Meeting"
+    | "Holiday"
+    | "School Activity"
+    | "Deadline"
+    | "Quarter"
+    | "School Event";
   color: string;
   sortTimestamp: number;
 };
@@ -83,20 +96,49 @@ type ApiAssignment = {
   gradeLevel?: string | null;
 };
 
-function getSchoolYearLabel(date = new Date()) {
-  const month = date.getMonth();
-  const year = date.getFullYear();
-  const startYear = month >= 7 ? year : year - 1;
-  const endYear = startYear + 1;
-  return `SY ${startYear}-${endYear}`;
-}
+type ApiSchoolEvent = {
+  id: number;
+  title: string;
+  category: string;
+  eventDate: string;
+  startTime?: string | null;
+  location?: string | null;
+};
 
-function getQuarterLabel(date = new Date()) {
-  const m = date.getMonth();
-  if (m >= 7 && m <= 9) return "Quarter 1";
-  if (m === 10 || m === 11 || m === 0) return "Quarter 2";
-  if (m >= 1 && m <= 3) return "Quarter 3";
-  return "Quarter 4";
+function schoolEventStyle(category: string) {
+  switch (category) {
+    case "Meeting":
+      return {
+        type: "Meeting" as const,
+        color: "bg-emerald-100 text-emerald-700 border-emerald-200",
+      };
+    case "Holiday":
+      return {
+        type: "Holiday" as const,
+        color: "bg-orange-100 text-orange-700 border-orange-200",
+      };
+    case "School Activity":
+      return {
+        type: "School Activity" as const,
+        color: "bg-amber-100 text-amber-700 border-amber-200",
+      };
+    case "Grade Encoding Deadline":
+    case "Deadlines":
+      return {
+        type: "Deadline" as const,
+        color: "bg-blue-100 text-blue-700 border-blue-200",
+      };
+    case "Quarters":
+      return {
+        type: "Quarter" as const,
+        color: "bg-violet-100 text-violet-700 border-violet-200",
+      };
+    default:
+      return {
+        type: "School Event" as const,
+        color: "bg-slate-100 text-slate-700 border-slate-200",
+      };
+  }
 }
 
 function formatGradeSection(gradeLevel?: string | null, sectionName?: string | null) {
@@ -126,6 +168,12 @@ function getStartDateTimeTimestamp(isoDate: string, time?: string | null) {
   return getEndOfDayTimestamp(isoDate);
 }
 
+function getTimeGreeting(hour: number) {
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
 function ChatGPTMark({ className = "w-5 h-5" }: { className?: string }) {
   return (
     <svg viewBox="0 0 256 256" className={className} aria-hidden="true" focusable="false">
@@ -141,13 +189,16 @@ export default function StudentDashboard() {
   const router = useRouter();
   const [studentName, setStudentName] = useState("");
   const [subjects, setSubjects] = useState<SubjectProgress[]>([]);
-  const syLabel = getSchoolYearLabel();
-  const quarterLabel = getQuarterLabel();
   const [showAiChat, setShowAiChat] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_STUDY_BUDDY_MESSAGES);
   const [input, setInput] = useState("");
   const [aiSending, setAiSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [dashboardNow] = useState(() => new Date());
+  const currentHour = dashboardNow.getHours();
+  const greeting = getTimeGreeting(currentHour);
+  const GreetingIcon =
+    currentHour < 12 ? Sun : currentHour < 18 ? Sunset : Moon;
 
   useEffect(() => {
     try {
@@ -306,13 +357,21 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([api.get("/api/exams/me"), api.get("/api/quizzes/me"), api.get("/api/assignments/me")])
-      .then(([examsRes, quizzesRes, assignmentsRes]) => {
+    Promise.all([
+      api.get("/api/exams/me"),
+      api.get("/api/quizzes/me"),
+      api.get("/api/assignments/me"),
+      api.get("/api/events").catch(() => ({ data: { events: [] } })),
+    ])
+      .then(([examsRes, quizzesRes, assignmentsRes, schoolEventsRes]) => {
         if (!active) return;
         const exams = Array.isArray(examsRes.data?.exams) ? (examsRes.data.exams as ApiExam[]) : [];
         const quizzes = Array.isArray(quizzesRes.data?.quizzes) ? (quizzesRes.data.quizzes as ApiQuiz[]) : [];
         const assignments = Array.isArray(assignmentsRes.data?.assignments)
           ? (assignmentsRes.data.assignments as ApiAssignment[])
+          : [];
+        const schoolEvents = Array.isArray(schoolEventsRes.data?.events)
+          ? (schoolEventsRes.data.events as ApiSchoolEvent[])
           : [];
 
         const examEvents: CalendarEvent[] = exams.map((exam) => {
@@ -363,7 +422,31 @@ export default function StudentDashboard() {
             };
           });
 
-        setEvents([...examEvents, ...quizEvents, ...assignmentEvents]);
+        const audienceEvents: CalendarEvent[] = schoolEvents.map((event) => {
+          const style = schoolEventStyle(event.category);
+          const date = new Date(event.eventDate);
+          return {
+            id: `school-event-${event.id}`,
+            title: event.title,
+            isoDate: event.eventDate,
+            date: date.getDate(),
+            time: event.startTime || "All day",
+            location: event.location || "School event",
+            type: style.type,
+            color: style.color,
+            sortTimestamp: getStartDateTimeTimestamp(
+              event.eventDate,
+              event.startTime,
+            ),
+          };
+        });
+
+        setEvents([
+          ...examEvents,
+          ...quizEvents,
+          ...assignmentEvents,
+          ...audienceEvents,
+        ]);
       })
       .catch(() => {
         if (active) setEvents([]);
@@ -427,25 +510,30 @@ export default function StudentDashboard() {
         </span>
       </button>
 
-      <div className="mx-auto max-w-7xl space-y-8 p-6">
-        <div className="flex flex-col justify-between gap-4 md:flex-row">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">Welcome, {studentName || "Student"}</h1>
-            <p className="text-gray-500">Here is your learning overview for today.</p>
+      <div className="mx-auto max-w-7xl space-y-8 p-4 sm:p-6">
+        <section className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-slate-500">
+              Welcome back, Student
+            </p>
+            <h1
+              suppressHydrationWarning
+              className="mt-1 break-words text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl"
+            >
+              {greeting}, {studentName || "Student"}
+            </h1>
+            <p className="mt-2 text-sm text-slate-600 sm:text-base">
+              Here is your learning overview for today.
+            </p>
+            <div className="mt-4">
+              <AcademicDashboardBadges />
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-gradient-to-r from-blue-50 to-white px-3 py-1.5 text-sm font-semibold text-blue-700 shadow-sm">
-              <span className="h-2 w-2 rounded-full bg-blue-500" />
-              {syLabel}
-            </span>
-
-            <span className="inline-flex items-center gap-2 rounded-full border border-purple-200 bg-gradient-to-r from-purple-50 to-white px-3 py-1.5 text-sm font-semibold text-purple-700 shadow-sm">
-              <span className="h-2 w-2 rounded-full bg-purple-500" />
-              {quarterLabel}
-            </span>
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-amber-100 bg-amber-50 text-amber-600 shadow-sm">
+            <GreetingIcon className="h-7 w-7" />
           </div>
-        </div>
+        </section>
 
         <div className="space-y-8">
           <div className="space-y-8">

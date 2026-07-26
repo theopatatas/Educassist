@@ -9,6 +9,11 @@ import { Student } from "../../db/models/Student.model";
 import { Subject } from "../../db/models/Subject.model";
 import { Teacher } from "../../db/models/Teacher.model";
 import { User } from "../../db/models/User.model";
+import { getAcademicContext } from "../admin/settings.service";
+import {
+  calculateFinalSubjectAverage,
+  calculateOverallStudentAverage,
+} from "../../utils/calculations";
 
 export type CreateClassInput = {
   className?: string;
@@ -34,6 +39,12 @@ type SaveGradesInput = {
   publish: boolean;
   rows: Array<{ studentId: number; score: number }>;
 };
+
+export type SaveGradesResult =
+  | number
+  | null
+  | false
+  | { error: string; status: number };
 
 type SubjectKey = "math" | "science" | "english" | "filipino" | "mapeh" | "ap" | "tle" | "values";
 
@@ -404,9 +415,36 @@ export async function saveAttendanceForTeacher(userId: string, input: SaveAttend
   return countByKey.size;
 }
 
-export async function savePublishedGradesForTeacher(userId: string, input: SaveGradesInput) {
+export async function savePublishedGradesForTeacher(
+  userId: string,
+  input: SaveGradesInput,
+): Promise<SaveGradesResult> {
   const teacher = await Teacher.findOne({ where: { userId } });
   if (!teacher) return null;
+  const academic = await getAcademicContext();
+  if (
+    !academic.currentSchoolYear ||
+    academic.gradeEncodingStatus === "UNAVAILABLE"
+  ) {
+    return {
+      error: "Academic grading settings are not configured.",
+      status: 409,
+    };
+  }
+  if (quarterFromTerm(input.term) !== academic.gradeEncodingQuarter) {
+    return {
+      error: academic.gradeEncodingQuarter
+        ? `Grades can only be encoded for ${academic.gradeEncodingQuarter}.`
+        : "Grade encoding is not open for an academic quarter.",
+      status: 403,
+    };
+  }
+  if (academic.gradeEncodingStatus !== "OPEN") {
+    return {
+      error: "Grade encoding is currently locked.",
+      status: 423,
+    };
+  }
 
   const subjectName = normalizeSubjectName(input.subject);
   const subjectKey = toSubjectKey(input.subject);
@@ -437,6 +475,7 @@ export async function savePublishedGradesForTeacher(userId: string, input: SaveG
   const existingItems = await GradeItem.findAll({
     where: {
       classId,
+      academicYear: academic.currentSchoolYear,
       name: { [Op.like]: `${input.term}|%` },
     },
   });
@@ -452,7 +491,21 @@ export async function savePublishedGradesForTeacher(userId: string, input: SaveG
       weight: 1,
       maxScore: 100,
       dueDate: null,
+      academicYear: academic.currentSchoolYear,
+      gradeLevel: targetClass.gradeLevel,
     }));
+  if (!gradeItem.gradeLevel && targetClass.gradeLevel) {
+    await gradeItem.update({ gradeLevel: targetClass.gradeLevel });
+  }
+
+  const existingState = parseGradeItemName(gradeItem.name);
+  if (existingState?.published) {
+    return {
+      error:
+        "Published grades are locked. Only the Super Admin can unlock them.",
+      status: 423,
+    };
+  }
 
   if (gradeItem.name !== (input.publish ? publishName : draftName)) {
     await gradeItem.update({ name: input.publish ? publishName : draftName });
@@ -473,7 +526,144 @@ export async function savePublishedGradesForTeacher(userId: string, input: SaveG
   return saved;
 }
 
-export async function getPublishedGradesForStudent(userId: string, filter?: { term?: string }) {
+export async function getAcademicSessionsForStudent(userId: string) {
+  const student = await Student.findOne({ where: { userId } });
+  if (!student) return null;
+  const academic = await getAcademicContext();
+  const grades = await Grade.findAll({
+    where: { studentId: Number(student.id) },
+    attributes: ["gradeItemId"],
+  });
+  const gradeItemIds = grades.map((grade) => Number(grade.gradeItemId));
+  const items = gradeItemIds.length
+    ? await GradeItem.findAll({
+        where: {
+          id: gradeItemIds,
+          academicYear: { [Op.ne]: null },
+          name: { [Op.like]: "%|published" },
+        },
+        attributes: ["classId", "academicYear", "gradeLevel"],
+      })
+    : [];
+  const classIds = [...new Set(items.map((item) => Number(item.classId)))];
+  const classes = classIds.length
+    ? await Class.findAll({
+        where: { id: classIds },
+        attributes: ["id", "gradeLevel"],
+      })
+    : [];
+  const gradeByClass = new Map(
+    classes.map((item) => [Number(item.id), item.gradeLevel]),
+  );
+  const sessions = new Map<
+    string,
+    {
+      academicYear: string;
+      gradeLevel: string;
+      status: "Current" | "Completed";
+    }
+  >();
+  for (const item of items) {
+    const academicYear = String(item.academicYear ?? "").trim();
+    const gradeLevel = String(
+      item.gradeLevel ?? gradeByClass.get(Number(item.classId)) ?? "",
+    ).trim();
+    if (!academicYear || !gradeLevel) continue;
+    const current =
+      !student.graduatedAt &&
+      academicYear === academic.currentSchoolYear &&
+      gradeLevel === String(student.yearLevel ?? "");
+    sessions.set(`${academicYear}|${gradeLevel}`, {
+      academicYear,
+      gradeLevel,
+      status: current ? "Current" : "Completed",
+    });
+  }
+  if (!student.graduatedAt && academic.currentSchoolYear && student.yearLevel) {
+    const key = `${academic.currentSchoolYear}|${student.yearLevel}`;
+    sessions.set(key, {
+      academicYear: academic.currentSchoolYear,
+      gradeLevel: student.yearLevel,
+      status: "Current",
+    });
+  }
+  return Array.from(sessions.values()).sort((left, right) => {
+    if (left.status !== right.status) return left.status === "Current" ? -1 : 1;
+    const leftYear = Number(left.academicYear.match(/\d{4}/)?.[0] ?? 0);
+    const rightYear = Number(right.academicYear.match(/\d{4}/)?.[0] ?? 0);
+    if (leftYear !== rightYear) return rightYear - leftYear;
+    const leftGrade = Number(left.gradeLevel.match(/\d+/)?.[0] ?? 0);
+    const rightGrade = Number(right.gradeLevel.match(/\d+/)?.[0] ?? 0);
+    return rightGrade - leftGrade;
+  });
+}
+
+export async function getAcademicSessionsForTeacher(userId: string) {
+  const teacher = await Teacher.findOne({ where: { userId } });
+  if (!teacher) return null;
+  const academic = await getAcademicContext();
+  const classes = await Class.findAll({
+    where: { teacherId: teacher.id },
+    attributes: ["id", "gradeLevel"],
+  });
+  const classById = new Map(
+    classes.map((item) => [Number(item.id), item.gradeLevel]),
+  );
+  const classIds = Array.from(classById.keys());
+  const items = classIds.length
+    ? await GradeItem.findAll({
+        where: {
+          classId: classIds,
+          academicYear: { [Op.ne]: null },
+        },
+        attributes: ["classId", "academicYear", "gradeLevel"],
+      })
+    : [];
+  const sessions = new Map<
+    string,
+    {
+      academicYear: string;
+      gradeLevel: string;
+      status: "Current" | "Completed";
+    }
+  >();
+  for (const item of items) {
+    const academicYear = String(item.academicYear ?? "").trim();
+    const gradeLevel = String(
+      item.gradeLevel ?? classById.get(Number(item.classId)) ?? "",
+    ).trim();
+    if (!academicYear || !gradeLevel) continue;
+    const status =
+      academicYear === academic.currentSchoolYear ? "Current" : "Completed";
+    sessions.set(`${academicYear}|${gradeLevel}`, {
+      academicYear,
+      gradeLevel,
+      status,
+    });
+  }
+  if (academic.currentSchoolYear) {
+    for (const gradeLevel of new Set(
+      classes.map((item) => item.gradeLevel).filter(Boolean) as string[],
+    )) {
+      sessions.set(`${academic.currentSchoolYear}|${gradeLevel}`, {
+        academicYear: academic.currentSchoolYear,
+        gradeLevel,
+        status: "Current",
+      });
+    }
+  }
+  return Array.from(sessions.values()).sort((left, right) => {
+    if (left.status !== right.status) return left.status === "Current" ? -1 : 1;
+    const leftYear = Number(left.academicYear.match(/\d{4}/)?.[0] ?? 0);
+    const rightYear = Number(right.academicYear.match(/\d{4}/)?.[0] ?? 0);
+    return rightYear - leftYear;
+  });
+}
+
+export async function getPublishedGradesForStudent(
+  userId: string,
+  filter?: { term?: string; academicYear?: string; gradeLevel?: string },
+) {
   const student = await Student.findOne({ where: { userId } });
   if (!student) return null;
 
@@ -484,34 +674,60 @@ export async function getPublishedGradesForStudent(userId: string, filter?: { te
     { id: 4, name: "Quarter 4", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
   ];
   const targetQuarter = filter?.term ? quarterFromTerm(filter.term) : null;
-  if (!student.sectionId || !student.yearLevel) return rows;
-
-  const classes = await Class.findAll({
-    where: {
-      sectionId: student.sectionId,
-      gradeLevel: student.yearLevel,
-    },
-    attributes: ["id"],
+  const academic = await getAcademicContext();
+  const selectedAcademicYear =
+    filter?.academicYear?.trim() || academic.currentSchoolYear;
+  const selectedGradeLevel =
+    filter?.gradeLevel?.trim() || student.yearLevel || "";
+  const emptyResult = {
+    rows,
+    academicYear: selectedAcademicYear || null,
+    gradeLevel: selectedGradeLevel || null,
+    status:
+      !student.graduatedAt &&
+      selectedAcademicYear === academic.currentSchoolYear &&
+      selectedGradeLevel === String(student.yearLevel ?? "")
+        ? ("Current" as const)
+        : ("Completed" as const),
+    finalSubjectAverages: {} as Record<string, number>,
+    overallAverage: null as number | null,
+    academicRemarks: null as string | null,
+  };
+  if (!selectedAcademicYear || !selectedGradeLevel) return emptyResult;
+  const studentGrades = await Grade.findAll({
+    where: { studentId: Number(student.id) },
   });
-  const classIds = classes.map((c) => Number(c.id));
-  if (!classIds.length) return rows;
-
-  const gradeItems = await GradeItem.findAll({
+  const studentItemIds = studentGrades.map((grade) => Number(grade.gradeItemId));
+  if (!studentItemIds.length) return emptyResult;
+  const candidateItems = await GradeItem.findAll({
     where: {
-      classId: classIds,
+      id: studentItemIds,
+      academicYear: selectedAcademicYear,
       name: { [Op.like]: "%|published" },
     },
   });
+  const candidateClassIds = [
+    ...new Set(candidateItems.map((item) => Number(item.classId))),
+  ];
+  const sessionClasses = candidateClassIds.length
+    ? await Class.findAll({
+        where: { id: candidateClassIds, gradeLevel: selectedGradeLevel },
+        attributes: ["id"],
+      })
+    : [];
+  const classIds = new Set(sessionClasses.map((item) => Number(item.id)));
+  const gradeItems = candidateItems.filter((item) =>
+    item.gradeLevel
+      ? item.gradeLevel === selectedGradeLevel
+      : classIds.has(Number(item.classId)),
+  );
   const itemIds = gradeItems.map((g) => Number(g.id));
-  if (!itemIds.length) return rows;
-
-  const grades = await Grade.findAll({
-    where: {
-      studentId: Number(student.id),
-      gradeItemId: itemIds,
-    },
-  });
+  if (!itemIds.length) return emptyResult;
+  const grades = studentGrades.filter((grade) =>
+    itemIds.includes(Number(grade.gradeItemId)),
+  );
   const scoreByItemId = new Map(grades.map((g) => [Number(g.gradeItemId), Number(g.score)]));
+  const scoresBySubject = new Map<SubjectKey, Map<string, number>>();
 
   for (const item of gradeItems) {
     const parsed = parseGradeItemName(item.name);
@@ -522,65 +738,126 @@ export async function getPublishedGradesForStudent(userId: string, filter?: { te
     const row = rows.find((r) => r.name === quarter);
     if (!row) continue;
     const mapped = parsed.subjectKey as keyof typeof row;
-    const score = scoreByItemId.get(Number(item.id)) ?? 0;
+    const score = scoreByItemId.get(Number(item.id));
+    if (score === undefined) continue;
     (row[mapped] as number) = score;
+    const subjectScores =
+      scoresBySubject.get(parsed.subjectKey) ?? new Map<string, number>();
+    subjectScores.set(quarter, score);
+    scoresBySubject.set(parsed.subjectKey, subjectScores);
   }
 
-  return rows;
+  const finalSubjectAverages: Record<string, number> = {};
+  const finalCandidates: Array<number | null> = [];
+  for (const [subject, scores] of scoresBySubject) {
+    const values = [
+      scores.get("Quarter 1"),
+      scores.get("Quarter 2"),
+      scores.get("Quarter 3"),
+      scores.get("Quarter 4"),
+    ];
+    const average = calculateFinalSubjectAverage(values);
+    finalCandidates.push(average);
+    if (average !== null) finalSubjectAverages[subject] = average;
+  }
+  return {
+    ...emptyResult,
+    finalSubjectAverages,
+    overallAverage: calculateOverallStudentAverage(finalCandidates),
+  };
 }
 
 export async function getPublishedGradesForTeacher(
   userId: string,
-  filter: { section?: string; gradeLevel?: string; subject?: string; term?: string }
+  filter: {
+    section?: string;
+    gradeLevel?: string;
+    subject?: string;
+    term?: string;
+    academicYear?: string;
+  }
 ) {
   const teacher = await Teacher.findOne({ where: { userId } });
   if (!teacher) return null;
+  const academic = await getAcademicContext();
   const teacherClasses = await Class.findAll({ where: { teacherId: teacher.id }, order: [["id", "ASC"]] });
-  const subjects = await Subject.findAll();
-  const subjectById = new Map(subjects.map((s) => [Number(s.id), s.name]));
   const section = normalizeText(filter.section);
   const gradeLevel = normalizeText(filter.gradeLevel);
+  const selectedAcademicYear =
+    filter.academicYear?.trim() || academic.currentSchoolYear;
+  const historical = Boolean(
+    selectedAcademicYear &&
+      selectedAcademicYear !== academic.currentSchoolYear,
+  );
   const selectedSubjectKey = filter.subject ? toSubjectKey(filter.subject) : null;
   const teacherScopeClasses = teacherClasses.filter((cls) => {
     const sectionOk = !section || section === "all sections" || normalizeText(cls.name) === section;
-    const gradeOk = !gradeLevel || gradeLevel === "all grades" || normalizeText(cls.gradeLevel) === gradeLevel;
-    return sectionOk && gradeOk;
+    return sectionOk;
   });
-  if (!teacherScopeClasses.length) return { rows: [], published: false };
-
-  const scopeSectionName = teacherScopeClasses[0]?.name ?? null;
-  const scopeGradeLevel = teacherScopeClasses[0]?.gradeLevel ?? null;
-  const scopedClasses = await Class.findAll({
-    where: {
-      name: scopeSectionName,
-      gradeLevel: scopeGradeLevel,
-    },
-    order: [["id", "ASC"]],
-  });
-  const targetClass = scopedClasses.find((cls) => {
-    const classSubject = cls.subjectId ? subjectById.get(Number(cls.subjectId)) : null;
-    const subjectOk = !selectedSubjectKey || selectedSubjectKey === toSubjectKey(classSubject ?? "");
-    return subjectOk;
-  });
-  if (!targetClass) return { rows: [], published: false };
+  if (!teacherScopeClasses.length)
+    return {
+      rows: [],
+      published: false,
+      academic,
+      academicYear: selectedAcademicYear || null,
+      sessionStatus: historical ? "Completed" : "Current",
+    };
 
   const term = normalizeText(filter.term);
   const items = await GradeItem.findAll({
-    where: { classId: Number(targetClass.id) },
+    where: {
+      classId: teacherScopeClasses.map((item) => Number(item.id)),
+      ...(selectedAcademicYear
+        ? { academicYear: selectedAcademicYear }
+        : {}),
+    },
     order: [["id", "DESC"]],
   });
   const selectedItem = items.find((item) => {
     const parsed = parseGradeItemName(item.name);
     if (!parsed) return false;
+    if (historical && !parsed.published) return false;
+    const itemClass = teacherScopeClasses.find(
+      (cls) => Number(cls.id) === Number(item.classId),
+    );
+    const itemGrade = normalizeText(item.gradeLevel ?? itemClass?.gradeLevel);
+    const gradeOk =
+      !gradeLevel || gradeLevel === "all grades" || itemGrade === gradeLevel;
     const termOk = !term || normalizeText(parsed.term) === term;
     const subjectOk = !selectedSubjectKey || parsed.subjectKey === selectedSubjectKey;
-    return termOk && subjectOk;
+    return gradeOk && termOk && subjectOk;
   });
-  if (!selectedItem) return { rows: [], published: false };
+  if (!selectedItem)
+    return {
+      rows: [],
+      published: false,
+      academic,
+      academicYear: selectedAcademicYear || null,
+      sessionStatus: historical ? "Completed" : "Current",
+    };
   const parsed = parseGradeItemName(selectedItem.name);
   const grades = await Grade.findAll({ where: { gradeItemId: Number(selectedItem.id) } });
+  const students = grades.length
+    ? await Student.findAll({
+        where: { id: grades.map((grade) => Number(grade.studentId)) },
+        attributes: ["id", "firstName", "lastName"],
+      })
+    : [];
+  const studentById = new Map(
+    students.map((student) => [
+      Number(student.id),
+      `${student.lastName}, ${student.firstName}`,
+    ]),
+  );
   return {
-    rows: grades.map((g) => ({ studentId: Number(g.studentId), score: Number(g.score) })),
+    rows: grades.map((g) => ({
+      studentId: Number(g.studentId),
+      studentName: studentById.get(Number(g.studentId)) ?? "Student",
+      score: Number(g.score),
+    })),
     published: !!parsed?.published,
+    academic,
+    academicYear: selectedAcademicYear || null,
+    sessionStatus: historical ? "Completed" : "Current",
   };
 }

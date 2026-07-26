@@ -40,10 +40,23 @@ GradeItem.init({
         allowNull: true,
         field: "due_date",
     },
+    academicYear: {
+        type: sequelize_1.DataTypes.STRING(20),
+        allowNull: true,
+        field: "academic_year",
+    },
+    gradeLevel: {
+        type: sequelize_1.DataTypes.STRING(50),
+        allowNull: true,
+        field: "grade_level",
+    },
 }, {
     sequelize: db_1.sequelize,
     tableName: "grade_items",
     timestamps: true,
     underscored: true,
-    indexes: [{ fields: ["class_id"] }],
+    indexes: [
+        { fields: ["class_id"] },
+        { fields: ["class_id", "academic_year"] },
+    ],
 });

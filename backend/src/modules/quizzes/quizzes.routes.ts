@@ -13,14 +13,18 @@ import {
   submitMyQuiz,
   updateMyQuiz,
 } from "./quizzes.controller";
+import {
+  blockTakenOverBodyClass,
+  blockTakenOverQuiz,
+} from "../leave/takeover.middleware";
 
 const router = Router();
 
 router.get("/me", requireAuth, requireRole("teacher", "student"), listMyQuizzes);
-router.post("/me", requireAuth, requireRole("teacher"), createMyQuiz);
+router.post("/me", requireAuth, requireRole("teacher"), blockTakenOverBodyClass, createMyQuiz);
 router.get("/:id", requireAuth, requireRole("teacher", "student"), getMyQuiz);
-router.patch("/:id", requireAuth, requireRole("teacher"), updateMyQuiz);
-router.put("/:id/questions", requireAuth, requireRole("teacher"), saveMyQuizQuestions);
+router.patch("/:id", requireAuth, requireRole("teacher"), blockTakenOverQuiz, updateMyQuiz);
+router.put("/:id/questions", requireAuth, requireRole("teacher"), blockTakenOverQuiz, saveMyQuizQuestions);
 router.get("/:id/results", requireAuth, requireRole("teacher"), listMyQuizResults);
 router.get("/:id/analytics", requireAuth, requireRole("teacher"), getMyQuizAnalytics);
 router.post("/:id/start", requireAuth, requireRole("student"), startMyQuiz);

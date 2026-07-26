@@ -48,6 +48,8 @@ import {
   type AdminStudent,
 } from "../_lib/admin-insights";
 import { getLocal, setLocal } from "@/src/lib/storage/local";
+import { useAcademicContext } from "@/src/features/academic/useAcademicContext";
+import AcademicDashboardBadges from "../../AcademicDashboardBadges";
 
 const emptyOverview: AdminOverview = {
   users: 0,
@@ -130,6 +132,7 @@ function eventDateLabel(event: Pick<AdminCalendarEvent, "date" | "endDate">) {
 }
 
 export default function AdminDashboard() {
+  const academic = useAcademicContext();
   const [overview, setOverview] = useState<AdminOverview>(emptyOverview);
   const [students, setStudents] = useState<AdminStudent[]>([]);
   const [subjectCount, setSubjectCount] = useState<number | null>(null);
@@ -456,8 +459,8 @@ export default function AdminDashboard() {
     },
     {
       label: "Current School Year",
-      value: null,
-      description: "Awaiting school-year configuration",
+      value: academic?.currentSchoolYear || null,
+      description: academic?.currentQuarter || "Academic period unavailable",
       icon: CalendarDays,
       href: "/admin/settings",
       tone: "violet" as const,
@@ -497,6 +500,9 @@ export default function AdminDashboard() {
             Here is a focused overview of users, academics, and work requiring
             attention.
           </p>
+          <div className="mt-4">
+            <AcademicDashboardBadges />
+          </div>
           {coreError ? (
             <p role="alert" className="mt-2 text-sm text-rose-600">
               Live dashboard data could not be loaded. Please try again later.

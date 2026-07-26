@@ -1,7 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getSettings = getSettings;
+exports.getCurrentAcademicContext = getCurrentAcademicContext;
 exports.updateSettingsSection = updateSettingsSection;
+exports.updateGradeEncodingStatus = updateGradeEncodingStatus;
+exports.gradeSubmissionProgress = gradeSubmissionProgress;
+exports.academicAuditLogs = academicAuditLogs;
+exports.unlockPublishedGrades = unlockPublishedGrades;
 exports.uploadLogo = uploadLogo;
 exports.deleteLogo = deleteLogo;
 const settings_service_1 = require("./settings.service");
@@ -25,10 +30,16 @@ function validateSection(section, value) {
             return "A valid school email is required";
     }
     if (section === "academic") {
-        if (!text("currentSchoolYear") ||
-            !text("currentSemester") ||
-            !text("currentQuarter"))
-            return "School year, semester, and quarter are required";
+        if (!text("currentSchoolYear") || !text("currentQuarter"))
+            return "School year and quarter are required";
+        if (![
+            "Quarter 1",
+            "Quarter 2",
+            "Quarter 3",
+            "Quarter 4",
+            "End of School Year",
+        ].includes(text("currentQuarter")))
+            return "Academic period must be Quarter 1, Quarter 2, Quarter 3, Quarter 4, or End of School Year";
         const passingGrade = Number(value.passingGrade);
         if (!Number.isFinite(passingGrade) ||
             passingGrade < 0 ||
@@ -51,6 +62,9 @@ function validateSection(section, value) {
 async function getSettings(_req, res) {
     return res.json({ ok: true, settings: await (0, settings_service_1.getPlatformSettings)() });
 }
+async function getCurrentAcademicContext(_req, res) {
+    return res.json({ ok: true, academic: await (0, settings_service_1.getAcademicContext)() });
+}
 async function updateSettingsSection(req, res) {
     const section = req.params.section;
     if (!settings_service_1.editableSections.includes(section)) {
@@ -66,8 +80,93 @@ async function updateSettingsSection(req, res) {
     const validationError = validateSection(section, req.body);
     if (validationError)
         return res.status(400).json({ ok: false, message: validationError });
-    const settings = await (0, settings_service_1.savePlatformSettingsSection)(section, req.body, userId(req));
+    const id = userId(req);
+    const mutationContext = id
+        ? {
+            userId: id,
+            role: String(req.user?.role ?? "super_admin"),
+            ipAddress: req.ip,
+            deviceInfo: req.get("user-agent") ?? null,
+        }
+        : null;
+    let settings;
+    if (section === "academic" && mutationContext) {
+        settings = await (0, settings_service_1.saveAcademicSettings)(req.body, mutationContext);
+    }
+    else {
+        settings = await (0, settings_service_1.savePlatformSettingsSection)(section, req.body, id);
+        if (section === "general" && mutationContext) {
+            const platform = await (0, settings_service_1.getPlatformSettings)();
+            if (platform.academic &&
+                String(platform.academic.currentSchoolYear ?? "") !==
+                    String(req.body.currentAcademicYear ?? "")) {
+                await (0, settings_service_1.saveAcademicSettings)({
+                    ...platform.academic,
+                    currentSchoolYear: req.body.currentAcademicYear,
+                }, mutationContext);
+            }
+        }
+    }
     return res.json({ ok: true, settings });
+}
+async function updateGradeEncodingStatus(req, res) {
+    const id = userId(req);
+    const status = String(req.body?.status ?? "").toUpperCase();
+    const deadline = String(req.body?.deadline ?? "").trim() || undefined;
+    if (!id || !["OPEN", "LOCKED"].includes(status)) {
+        return res
+            .status(400)
+            .json({ ok: false, message: "A valid encoding status is required" });
+    }
+    if (deadline && !/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
+        return res
+            .status(400)
+            .json({ ok: false, message: "Deadline must be a valid date" });
+    }
+    const settings = await (0, settings_service_1.setGradeEncodingStatus)(status, {
+        userId: id,
+        role: String(req.user?.role ?? "super_admin"),
+        ipAddress: req.ip,
+        deviceInfo: req.get("user-agent") ?? null,
+    }, deadline);
+    if (!settings)
+        return res
+            .status(404)
+            .json({ ok: false, message: "Academic settings are unavailable" });
+    return res.json({ ok: true, settings });
+}
+async function gradeSubmissionProgress(_req, res) {
+    return res.json({
+        ok: true,
+        progress: await (0, settings_service_1.getGradeSubmissionProgress)(),
+    });
+}
+async function academicAuditLogs(_req, res) {
+    return res.json({ ok: true, audits: await (0, settings_service_1.listAcademicAuditLogs)() });
+}
+async function unlockPublishedGrades(req, res) {
+    const id = userId(req);
+    const gradeItemId = Number(req.params.gradeItemId);
+    if (!id || !Number.isInteger(gradeItemId) || gradeItemId <= 0) {
+        return res
+            .status(400)
+            .json({ ok: false, message: "A valid grade item is required" });
+    }
+    const result = await (0, settings_service_1.unlockPublishedGradeItem)(gradeItemId, {
+        userId: id,
+        role: String(req.user?.role ?? "super_admin"),
+        ipAddress: req.ip,
+        deviceInfo: req.get("user-agent") ?? null,
+    });
+    if (result === null)
+        return res
+            .status(404)
+            .json({ ok: false, message: "Grade item not found" });
+    if (result === false)
+        return res
+            .status(409)
+            .json({ ok: false, message: "Grades are already unlocked" });
+    return res.json({ ok: true, gradeItem: result });
 }
 async function uploadLogo(req, res) {
     if (!req.file)

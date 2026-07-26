@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Bell, Menu, LogOut, Settings, UserCircle, X, GraduationCap } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Menu, LogOut, Settings, UserCircle, X, GraduationCap } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/src/features/auth/hooks";
 import { api } from "@/src/lib/http/client";
-
-type Notice = { id: number; title: string; time: string; read: boolean };
+import EventNotifications from "../EventNotifications";
 
 type TeacherHeaderProps = {
   onMenuClick: () => void;
@@ -21,6 +20,7 @@ const pageTitles: Record<string, string> = {
   "/teacher/assignment": "Assignment",
   "/teacher/grade-portal": "Grade Portal",
   "/teacher/attendance": "Attendance",
+  "/teacher/leave-requests": "Leave Requests",
   "/teacher/reports": "Reports",
 };
 
@@ -28,7 +28,6 @@ export default function TeacherHeader({ onMenuClick }: TeacherHeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { logout } = useAuth();
-  const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -40,7 +39,6 @@ export default function TeacherHeader({ onMenuClick }: TeacherHeaderProps) {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordStatus, setPasswordStatus] = useState("");
-  const [notifications, setNotifications] = useState<Notice[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -60,17 +58,6 @@ export default function TeacherHeader({ onMenuClick }: TeacherHeaderProps) {
       active = false;
     };
   }, []);
-
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.read).length,
-    [notifications]
-  );
-
-  const markAsRead = (id: number) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
-  };
 
   const initials = teacherName
     .split(" ")
@@ -146,58 +133,7 @@ export default function TeacherHeader({ onMenuClick }: TeacherHeaderProps) {
           </div>
 
           <div className="flex shrink-0 items-center gap-1 sm:gap-3 lg:gap-4">
-            <div className="relative">
-              <button
-                onClick={() => setShowNotifications((v) => !v)}
-                className="relative rounded-full p-2 hover:bg-slate-100"
-                aria-label="Open notifications"
-              >
-                <Bell className="h-5 w-5 text-slate-600" />
-                {unreadCount > 0 && (
-                  <>
-                    <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500" />
-                    <span className="sr-only">{unreadCount} unread notifications</span>
-                  </>
-                )}
-              </button>
-
-              {showNotifications ? (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
-                  <div className="absolute right-0 z-50 mt-2 w-[min(20rem,calc(100vw-1rem))] overflow-hidden rounded-xl border bg-white shadow-xl">
-                    <div className="flex items-center justify-between border-b p-4 font-bold">
-                      <span>Notifications</span>
-                      {unreadCount > 0 && (
-                        <span className="text-xs text-slate-500">{unreadCount} unread</span>
-                      )}
-                    </div>
-                    {notifications.length === 0 ? (
-                      <div className="p-4 text-sm text-slate-600">No notifications yet.</div>
-                    ) : (
-                      notifications.map((n) => (
-                        <div
-                          key={n.id}
-                          onClick={() => markAsRead(n.id)}
-                          className={`cursor-pointer p-4 text-sm hover:bg-slate-50 ${
-                            !n.read ? "bg-slate-50" : ""
-                          }`}
-                          role="button"
-                          tabIndex={0}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <span className="text-slate-800">{n.title}</span>
-                            {!n.read && (
-                              <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-slate-900" />
-                            )}
-                          </div>
-                          <p className="mt-1 text-xs text-slate-500">{n.time}</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </>
-              ) : null}
-            </div>
+            <EventNotifications eventHref="/teacher/dashboard" />
 
             <div className="relative">
               <button

@@ -7,7 +7,7 @@ exports.deleteEvent = deleteEvent;
 const sequelize_1 = require("sequelize");
 const SchoolEvent_model_1 = require("../../db/models/SchoolEvent.model");
 const User_model_1 = require("../../db/models/User.model");
-async function listEvents(query) {
+async function listEvents(query, audienceRole) {
     const today = new Intl.DateTimeFormat("en-CA", {
         timeZone: "Asia/Manila",
         year: "numeric",
@@ -51,7 +51,14 @@ async function listEvents(query) {
     const creatorIds = [...new Set(events.map((event) => event.createdBy))];
     const creators = await User_model_1.User.findAll({
         where: { id: creatorIds },
-        attributes: ["id", "firstName", "lastName", "displayName", "email"],
+        attributes: [
+            "id",
+            "role",
+            "firstName",
+            "lastName",
+            "displayName",
+            "email",
+        ],
     });
     const byId = new Map(creators.map((user) => [String(user.id), user]));
     return events.map((event) => {
@@ -62,12 +69,38 @@ async function listEvents(query) {
             creator: creator
                 ? {
                     id: Number(creator.id),
-                    name: creator.displayName ||
-                        [creator.firstName, creator.lastName].filter(Boolean).join(" ") ||
-                        creator.email,
+                    name: event.category === "Grade Encoding Deadline" &&
+                        ["admin", "super_admin"].includes(String(creator.role).toLowerCase())
+                        ? "Principal"
+                        : creator.displayName ||
+                            [creator.firstName, creator.lastName]
+                                .filter(Boolean)
+                                .join(" ") ||
+                            creator.email,
                 }
                 : null,
         };
+    }).filter((event) => {
+        if (!audienceRole || ["admin", "managed_admin"].includes(audienceRole))
+            return true;
+        const audience = event.targetAudience.trim().toLowerCase();
+        if (audience === "all users")
+            return true;
+        if (audienceRole === "teacher")
+            return audience === "all teachers";
+        if (audienceRole === "student")
+            return audience === "all students" ||
+                audience === "grade level" ||
+                audience.startsWith("grade level:") ||
+                audience === "section" ||
+                audience.startsWith("section:");
+        if (audienceRole === "parent")
+            return audience === "all parents" ||
+                audience === "grade level" ||
+                audience.startsWith("grade level:") ||
+                audience === "section" ||
+                audience.startsWith("section:");
+        return false;
     });
 }
 const createEvent = (input, createdBy) => SchoolEvent_model_1.SchoolEvent.create({ ...input, createdBy });

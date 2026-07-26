@@ -2,7 +2,11 @@ import bcrypt from "bcryptjs";
 import { Op, type Transaction } from "sequelize";
 import { sequelize } from "../../config/db";
 import { Attendance } from "../../db/models/Attendance.model";
-import { calculateAttendancePercentage } from "../../utils/calculations";
+import {
+  calculateAttendancePercentage,
+  calculateFinalSubjectAverage,
+  calculateOverallStudentAverage,
+} from "../../utils/calculations";
 import { Class } from "../../db/models/Class.model";
 import { Grade } from "../../db/models/Grade.model";
 import { GradeItem } from "../../db/models/GradeItem.model";
@@ -11,6 +15,7 @@ import { Section } from "../../db/models/Section.model";
 import { Student } from "../../db/models/Student.model";
 import { Subject } from "../../db/models/Subject.model";
 import { User } from "../../db/models/User.model";
+import { getAcademicContext } from "../admin/settings.service";
 
 export type CreateStudentInput = {
   email: string;
@@ -310,47 +315,123 @@ export async function getStudentDetailsById(id: string) {
   };
 }
 
-export async function getStudentAcademicRecordById(id: string) {
+export async function getStudentAcademicSessionsById(id: string) {
   const student = await Student.findByPk(id);
   if (!student) return null;
-  const classes =
-    student.sectionId && student.yearLevel
-      ? await Class.findAll({
+  const academic = await getAcademicContext();
+  const grades = await Grade.findAll({
+    where: { studentId: student.id },
+    attributes: ["gradeItemId"],
+  });
+  const itemIds = grades.map((grade) => Number(grade.gradeItemId));
+  const items = itemIds.length
+    ? await GradeItem.findAll({
+        where: {
+          id: itemIds,
+          academicYear: { [Op.ne]: null },
+          name: { [Op.like]: "%|published" },
+        },
+        attributes: ["classId", "academicYear", "gradeLevel"],
+      })
+    : [];
+  const classIds = [...new Set(items.map((item) => Number(item.classId)))];
+  const classes = classIds.length
+    ? await Class.findAll({
+        where: { id: classIds },
+        attributes: ["id", "gradeLevel"],
+      })
+    : [];
+  const gradeByClass = new Map(
+    classes.map((item) => [Number(item.id), item.gradeLevel]),
+  );
+  const sessions = new Map<
+    string,
+    {
+      academicYear: string;
+      gradeLevel: string;
+      status: "Current" | "Completed";
+    }
+  >();
+  for (const item of items) {
+    const academicYear = String(item.academicYear ?? "").trim();
+    const gradeLevel = String(
+      item.gradeLevel ?? gradeByClass.get(Number(item.classId)) ?? "",
+    ).trim();
+    if (!academicYear || !gradeLevel) continue;
+    const current =
+      academicYear === academic.currentSchoolYear &&
+      gradeLevel === String(student.yearLevel ?? "");
+    sessions.set(`${academicYear}|${gradeLevel}`, {
+      academicYear,
+      gradeLevel,
+      status: current ? "Current" : "Completed",
+    });
+  }
+  if (academic.currentSchoolYear && student.yearLevel) {
+    sessions.set(`${academic.currentSchoolYear}|${student.yearLevel}`, {
+      academicYear: academic.currentSchoolYear,
+      gradeLevel: student.yearLevel,
+      status: "Current",
+    });
+  }
+  return Array.from(sessions.values()).sort((left, right) => {
+    if (left.status !== right.status) return left.status === "Current" ? -1 : 1;
+    const leftYear = Number(left.academicYear.match(/\d{4}/)?.[0] ?? 0);
+    const rightYear = Number(right.academicYear.match(/\d{4}/)?.[0] ?? 0);
+    return rightYear - leftYear;
+  });
+}
+
+export async function getStudentAcademicRecordById(
+  id: string,
+  filter?: { academicYear?: string; gradeLevel?: string },
+) {
+  const academic = await getAcademicContext();
+  const student = await Student.findByPk(id);
+  if (!student) return null;
+  const academicYear =
+    filter?.academicYear?.trim() || academic.currentSchoolYear;
+  const gradeLevel = filter?.gradeLevel?.trim() || student.yearLevel || "";
+  const allGrades = await Grade.findAll({ where: { studentId: student.id } });
+  const allItemIds = allGrades.map((grade) => Number(grade.gradeItemId));
+  const candidates =
+    allItemIds.length && academicYear
+      ? await GradeItem.findAll({
           where: {
-            sectionId: student.sectionId,
-            gradeLevel: student.yearLevel,
+            id: allItemIds,
+            academicYear,
+            name: { [Op.like]: "%|published" },
           },
         })
       : [];
-  const classIds = classes.map((row) => Number(row.id));
+  const classIds = [...new Set(candidates.map((item) => Number(item.classId)))];
+  const classes = classIds.length
+    ? await Class.findAll({ where: { id: classIds } })
+    : [];
+  const classById = new Map(classes.map((row) => [Number(row.id), row]));
+  const items = candidates.filter((item) => {
+    const itemGrade =
+      item.gradeLevel ?? classById.get(Number(item.classId))?.gradeLevel;
+    return !gradeLevel || itemGrade === gradeLevel;
+  });
+  const selectedItemIds = new Set(items.map((item) => Number(item.id)));
+  const grades = allGrades.filter((grade) =>
+    selectedItemIds.has(Number(grade.gradeItemId)),
+  );
+  const selectedClassIds = new Set(items.map((item) => Number(item.classId)));
   const subjectIds = classes
+    .filter((row) => selectedClassIds.has(Number(row.id)))
     .map((row) => Number(row.subjectId))
     .filter(Boolean);
-  const [subjects, items] = await Promise.all([
-    subjectIds.length
-      ? Subject.findAll({
-          where: { id: subjectIds },
-          attributes: ["id", "name", "code"],
-        })
-      : [],
-    classIds.length
-      ? GradeItem.findAll({
-          where: { classId: classIds, name: { [Op.like]: "%|published" } },
-        })
-      : [],
-  ]);
-  const grades = items.length
-    ? await Grade.findAll({
-        where: {
-          studentId: student.id,
-          gradeItemId: items.map((item) => Number(item.id)),
-        },
+  const subjects = subjectIds.length
+    ? await Subject.findAll({
+        where: { id: subjectIds },
+        attributes: ["id", "name", "code"],
       })
     : [];
   const subjectById = new Map(
     subjects.map((subject) => [Number(subject.id), subject]),
   );
-  const classById = new Map(classes.map((row) => [Number(row.id), row]));
   const scoreByItemId = new Map(
     grades.map((grade) => [Number(grade.gradeItemId), Number(grade.score)]),
   );
@@ -394,7 +475,30 @@ export async function getStudentAcademicRecordById(id: string) {
     else if (term.startsWith("4")) record.quarter4 = score;
     else if (/final/i.test(term)) record.finalGrade = score;
   }
-  return { subjects: Array.from(records.values()) };
+  const academicRecords = Array.from(records.values()).map((record) => ({
+    ...record,
+    finalGrade:
+      record.finalGrade ??
+      calculateFinalSubjectAverage([
+        record.quarter1,
+        record.quarter2,
+        record.quarter3,
+        record.quarter4,
+      ]),
+  }));
+  return {
+    academicYear: academicYear || null,
+    gradeLevel: gradeLevel || null,
+    status:
+      academicYear === academic.currentSchoolYear &&
+      gradeLevel === String(student.yearLevel ?? "")
+        ? "Current"
+        : "Completed",
+    subjects: academicRecords,
+    overallAverage: calculateOverallStudentAverage(
+      academicRecords.map((record) => record.finalGrade),
+    ),
+  };
 }
 
 export async function getStudentAttendanceHistoryById(id: string) {
@@ -485,6 +589,7 @@ function normalizeText(value: unknown) {
 }
 
 export async function getStudentOverviewById(id: string) {
+  const academic = await getAcademicContext();
   const student = await Student.findByPk(id);
   if (!student) return null;
 
@@ -526,6 +631,9 @@ export async function getStudentOverviewById(id: string) {
       ? GradeItem.findAll({
           where: {
             classId: classIds,
+            ...(academic.currentSchoolYear
+              ? { academicYear: academic.currentSchoolYear }
+              : {}),
             name: { [Op.like]: "%|published" },
           },
           attributes: ["id", "name"],

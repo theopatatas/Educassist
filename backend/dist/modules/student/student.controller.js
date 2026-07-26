@@ -4,6 +4,7 @@ exports.create = create;
 exports.list = list;
 exports.getById = getById;
 exports.academicRecord = academicRecord;
+exports.academicSessions = academicSessions;
 exports.attendanceHistory = attendanceHistory;
 exports.overview = overview;
 exports.me = me;
@@ -30,10 +31,23 @@ async function getById(req, res) {
     return res.json({ ok: true, student });
 }
 async function academicRecord(req, res) {
-    const record = await (0, student_service_1.getStudentAcademicRecordById)(req.params.id);
+    const record = await (0, student_service_1.getStudentAcademicRecordById)(req.params.id, {
+        academicYear: typeof req.query.academicYear === "string"
+            ? req.query.academicYear
+            : undefined,
+        gradeLevel: typeof req.query.gradeLevel === "string"
+            ? req.query.gradeLevel
+            : undefined,
+    });
     if (!record)
         return res.status(404).json({ ok: false, message: "Student not found" });
     return res.json({ ok: true, record });
+}
+async function academicSessions(req, res) {
+    const sessions = await (0, student_service_1.getStudentAcademicSessionsById)(req.params.id);
+    if (!sessions)
+        return res.status(404).json({ ok: false, message: "Student not found" });
+    return res.json({ ok: true, sessions });
 }
 async function attendanceHistory(req, res) {
     const attendance = await (0, student_service_1.getStudentAttendanceHistoryById)(req.params.id);

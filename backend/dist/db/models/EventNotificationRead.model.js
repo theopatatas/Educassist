@@ -10,4 +10,9 @@ EventNotificationRead.init({
     id: { type: sequelize_1.DataTypes.BIGINT.UNSIGNED, autoIncrement: true, primaryKey: true },
     eventId: { type: sequelize_1.DataTypes.BIGINT.UNSIGNED, allowNull: false, field: "event_id", references: { model: "school_events", key: "id" }, onDelete: "CASCADE" },
     userId: { type: sequelize_1.DataTypes.BIGINT.UNSIGNED, allowNull: false, field: "user_id", references: { model: "users", key: "id" }, onDelete: "CASCADE" },
+    dismissedAt: {
+        type: sequelize_1.DataTypes.DATE,
+        allowNull: true,
+        field: "dismissed_at",
+    },
 }, { sequelize: db_1.sequelize, tableName: "event_notification_reads", timestamps: true, underscored: true, indexes: [{ unique: true, fields: ["event_id", "user_id"] }] });

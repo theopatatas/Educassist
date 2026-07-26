@@ -4,7 +4,7 @@ export function canAccess(required: Role, actual?: Role | null) {
   return actual === required;
 }
 
-export function roleHome(role: Role) {
+export function roleHome(role: Role, graduated = false) {
   switch (role) {
     case "super_admin":
       return "/admin";
@@ -15,6 +15,6 @@ export function roleHome(role: Role) {
     case "parent":
       return "/parent";
     default:
-      return "/student";
+      return graduated ? "/student/grade-portal" : "/student";
   }
 }

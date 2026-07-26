@@ -5,9 +5,10 @@ import {
   Bell,
   BookOpenCheck,
   Building2,
+  ChevronLeft,
+  ChevronRight,
   ImageIcon,
   MonitorCog,
-  Palette,
   RotateCcw,
   Save,
   Upload,
@@ -18,13 +19,17 @@ import type { LucideIcon } from "lucide-react";
 import { AdminPanel, InsightState } from "../_components/AdminInsightsUI";
 import {
   getAdminSettings,
+  getAcademicAuditLogs,
+  getGradeSubmissionProgress,
   removeSchoolLogo,
   updateAdminSettingsSection,
+  unlockPublishedGradeItem,
   uploadSchoolLogo,
   type AcademicSettings,
+  type AcademicAudit,
   type AdminSettings,
-  type AppearanceSettings,
   type GeneralSettings,
+  type GradeSubmissionProgress,
   type NotificationSettings,
   type UserManagementSettings,
 } from "../_lib/admin-settings";
@@ -34,10 +39,10 @@ type EditableTab =
   | "general"
   | "academic"
   | "userManagement"
-  | "notifications"
-  | "appearance";
+  | "notifications";
 type TabId = EditableTab | "branding" | "system";
 type Notice = { type: "success" | "error"; message: string };
+const ACADEMIC_PAGE_SIZE = 5;
 
 const tabs: Array<{ id: TabId; label: string; icon: LucideIcon }> = [
   { id: "general", label: "General", icon: Building2 },
@@ -45,7 +50,6 @@ const tabs: Array<{ id: TabId; label: string; icon: LucideIcon }> = [
   { id: "academic", label: "Academic", icon: BookOpenCheck },
   { id: "userManagement", label: "User Management", icon: UserCog },
   { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "appearance", label: "Appearance", icon: Palette },
   { id: "system", label: "System Information", icon: MonitorCog },
 ];
 
@@ -63,8 +67,13 @@ const blankAcademic: AcademicSettings = {
   currentSchoolYear: "",
   currentSemester: "",
   currentQuarter: "",
+  endOfSchoolYear: false,
   passingGrade: "",
   promotionPolicy: "",
+  gradeEncodingStartDate: "",
+  gradeEncodingDeadline: "",
+  gradeEncodingStatus: "",
+  gradePublishingStatus: "",
 };
 const blankUsers: UserManagementSettings = {
   requirePasswordChange: null,
@@ -77,10 +86,6 @@ const blankNotifications: NotificationSettings = {
   accountCreationNotifications: null,
   passwordResetNotifications: null,
   systemAnnouncements: null,
-};
-const blankAppearance: AppearanceSettings = {
-  theme: null,
-  compactLayout: null,
 };
 const emptySettings: AdminSettings = {
   general: null,
@@ -258,6 +263,44 @@ function Actions({
   );
 }
 
+function PaginationControls({
+  page,
+  pageCount,
+  onPageChange,
+}: {
+  page: number;
+  pageCount: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (pageCount <= 1) return null;
+  return (
+    <div className="mt-3 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+      <button
+        type="button"
+        disabled={page <= 1}
+        onClick={() => onPageChange(page - 1)}
+        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        Previous
+      </button>
+      <span className="text-sm text-slate-500">
+        Page <strong className="text-slate-800">{page}</strong> of{" "}
+        <strong className="text-slate-800">{pageCount}</strong>
+      </span>
+      <button
+        type="button"
+        disabled={page >= pageCount}
+        onClick={() => onPageChange(page + 1)}
+        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Next
+        <ChevronRight className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
 export default function AdminSettingsPage() {
   const [activeTab, setActiveTab] = useState<TabId>("general");
   const [saved, setSaved] = useState<AdminSettings>(emptySettings);
@@ -269,6 +312,7 @@ export default function AdminSettingsPage() {
   const [pendingLogoAction, setPendingLogoAction] = useState<
     "upload" | "remove" | null
   >(null);
+  const [pendingUnlock, setPendingUnlock] = useState<number | null>(null);
   const [adminPassword, setAdminPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [verifyingSave, setVerifyingSave] = useState(false);
@@ -277,15 +321,49 @@ export default function AdminSettingsPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoError, setLogoError] = useState("");
+  const [gradeProgress, setGradeProgress] =
+    useState<GradeSubmissionProgress | null>(null);
+  const [academicAudits, setAcademicAudits] = useState<AcademicAudit[]>([]);
+  const [publishedLocksPage, setPublishedLocksPage] = useState(1);
+  const [academicAuditsPage, setAcademicAuditsPage] = useState(1);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const loadSettings = useCallback(async () => {
     setLoading(true);
     setLoadError(false);
     try {
-      const settings = await getAdminSettings();
-      setSaved(settings);
-      setDraft(settings);
+      const [settings, progress, audits] = await Promise.all([
+        getAdminSettings(),
+        getGradeSubmissionProgress(),
+        getAcademicAuditLogs(),
+      ]);
+      const normalized: AdminSettings = {
+        ...settings,
+        academic: settings.academic
+          ? {
+              ...blankAcademic,
+              ...settings.academic,
+              gradeEncodingStartDate:
+                progress.academic.gradeEncodingStartDate,
+              gradeEncodingDeadline:
+                progress.academic.gradeEncodingDeadline,
+              gradeEncodingStatus:
+                progress.academic.gradeEncodingStatus === "UNAVAILABLE"
+                  ? ""
+                  : progress.academic.gradeEncodingStatus,
+              gradePublishingStatus:
+                progress.academic.gradePublishingStatus === "UNAVAILABLE"
+                  ? ""
+                  : progress.academic.gradePublishingStatus,
+            } as AcademicSettings
+          : null,
+      };
+      setSaved(normalized);
+      setDraft(normalized);
+      setGradeProgress(progress);
+      setAcademicAudits(audits);
+      setPublishedLocksPage(1);
+      setAcademicAuditsPage(1);
     } catch {
       setLoadError(true);
     } finally {
@@ -311,7 +389,31 @@ export default function AdminSettingsPage() {
   const academic = draft.academic ?? blankAcademic;
   const users = draft.userManagement ?? blankUsers;
   const notifications = draft.notifications ?? blankNotifications;
-  const appearance = draft.appearance ?? blankAppearance;
+  const publishedLocks = gradeProgress?.publishedItems ?? [];
+  const publishedLocksPageCount = Math.max(
+    1,
+    Math.ceil(publishedLocks.length / ACADEMIC_PAGE_SIZE),
+  );
+  const paginatedPublishedLocks = publishedLocks.slice(
+    (publishedLocksPage - 1) * ACADEMIC_PAGE_SIZE,
+    publishedLocksPage * ACADEMIC_PAGE_SIZE,
+  );
+  const academicAuditsPageCount = Math.max(
+    1,
+    Math.ceil(academicAudits.length / ACADEMIC_PAGE_SIZE),
+  );
+  const paginatedAcademicAudits = academicAudits.slice(
+    (academicAuditsPage - 1) * ACADEMIC_PAGE_SIZE,
+    academicAuditsPage * ACADEMIC_PAGE_SIZE,
+  );
+  useEffect(() => {
+    if (publishedLocksPage > publishedLocksPageCount)
+      setPublishedLocksPage(publishedLocksPageCount);
+  }, [publishedLocksPage, publishedLocksPageCount]);
+  useEffect(() => {
+    if (academicAuditsPage > academicAuditsPageCount)
+      setAcademicAuditsPage(academicAuditsPageCount);
+  }, [academicAuditsPage, academicAuditsPageCount]);
   const timeZones = useMemo(() => {
     const supported = (
       Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] }
@@ -350,10 +452,14 @@ export default function AdminSettingsPage() {
     if (section === "academic") {
       if (!academic.currentSchoolYear.trim())
         next.currentSchoolYear = "School year is required.";
-      if (!academic.currentSemester.trim())
-        next.currentSemester = "Semester is required.";
       if (!academic.currentQuarter.trim())
         next.currentQuarter = "Quarter is required.";
+      if (
+        academic.gradeEncodingStatus === "OPEN" &&
+        !academic.gradeEncodingDeadline
+      )
+        next.gradeEncodingDeadline =
+          "An open encoding window requires a deadline.";
       const grade = Number(academic.passingGrade);
       if (!academic.passingGrade || grade < 0 || grade > 100)
         next.passingGrade = "Enter a grade from 0 to 100.";
@@ -381,6 +487,11 @@ export default function AdminSettingsPage() {
       );
       setSaved((current) => ({ ...current, [pendingSave]: updated }));
       setDraft((current) => ({ ...current, [pendingSave]: updated }));
+      if (pendingSave === "academic") {
+        setGradeProgress(await getGradeSubmissionProgress());
+        setAcademicAudits(await getAcademicAuditLogs());
+        window.dispatchEvent(new Event("educassist-academic-updated"));
+      }
       setNotice({ type: "success", message: "Settings saved successfully." });
       setPendingSave(null);
       setAdminPassword("");
@@ -469,6 +580,17 @@ export default function AdminSettingsPage() {
       if (pendingSave) await confirmSave();
       else if (pendingLogoAction === "upload") await saveSelectedLogo();
       else if (pendingLogoAction === "remove") await deleteLogo();
+      else if (pendingUnlock) {
+        await unlockPublishedGradeItem(pendingUnlock);
+        setGradeProgress(await getGradeSubmissionProgress());
+        setAcademicAudits(await getAcademicAuditLogs());
+        setPendingUnlock(null);
+        setAdminPassword("");
+        setNotice({
+          type: "success",
+          message: "Published grades unlocked successfully.",
+        });
+      }
     } catch (error) {
       setPasswordError(
         message(error, "Super Admin password verification failed."),
@@ -511,8 +633,7 @@ export default function AdminSettingsPage() {
         </div>
       ) : null}
       <p className="text-sm text-slate-600">
-        Configure school information, academic rules, notifications, and
-        appearance.
+        Configure school information, academic rules, and notifications.
       </p>
       <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
         <nav
@@ -712,36 +833,63 @@ export default function AdminSettingsPage() {
                   value={academic.currentSchoolYear}
                   error={errors.currentSchoolYear}
                   onChange={(value) =>
-                    setSection("academic", {
-                      ...academic,
-                      currentSchoolYear: value,
+                      setSection("academic", {
+                        ...academic,
+                        currentSchoolYear: value,
+                        currentQuarter: "Quarter 1",
+                        endOfSchoolYear: false,
+                      gradeEncodingStartDate: "",
+                      gradeEncodingDeadline: "",
+                      gradeEncodingStatus: "LOCKED",
+                      gradePublishingStatus: "LOCKED",
                     })
                   }
                 />
-                <TextField
-                  label="Current Semester"
-                  required
-                  value={academic.currentSemester}
-                  error={errors.currentSemester}
-                  onChange={(value) =>
-                    setSection("academic", {
-                      ...academic,
-                      currentSemester: value,
-                    })
-                  }
-                />
-                <TextField
-                  label="Current Quarter"
-                  required
-                  value={academic.currentQuarter}
-                  error={errors.currentQuarter}
-                  onChange={(value) =>
-                    setSection("academic", {
-                      ...academic,
-                      currentQuarter: value,
-                    })
-                  }
-                />
+                <label className="font-medium text-slate-600">
+                  Active Quarter
+                  <select
+                    required
+                    value={academic.currentQuarter}
+                    onChange={(event) =>
+                      setSection("academic", {
+                        ...academic,
+                        currentQuarter: event.target.value,
+                        endOfSchoolYear:
+                          event.target.value === "End of School Year",
+                      })
+                    }
+                    className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 outline-none focus:ring-2 focus:ring-slate-200"
+                  >
+                    <option value="">Select active quarter</option>
+                    {[
+                      "Quarter 1",
+                      "Quarter 2",
+                      "Quarter 3",
+                      "Quarter 4",
+                      "End of School Year",
+                    ].map(
+                      (quarter) => (
+                        <option key={quarter} value={quarter}>
+                          {quarter}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                  {errors.currentQuarter ? (
+                    <span className="mt-1 block text-rose-600">
+                      {errors.currentQuarter}
+                    </span>
+                  ) : null}
+                  {gradeProgress?.academic.gradeEncodingQuarter ? (
+                    <span className="mt-1.5 block text-sm text-slate-500">
+                      Grade uploading is open for{" "}
+                      <strong className="text-slate-700">
+                        {gradeProgress.academic.gradeEncodingQuarter}
+                      </strong>
+                      .
+                    </span>
+                  ) : null}
+                </label>
                 <TextField
                   label="Passing Grade"
                   required
@@ -761,6 +909,202 @@ export default function AdminSettingsPage() {
                       promotionPolicy: value,
                     })
                   }
+                />
+                <label className="font-medium text-slate-600">
+                  Grade Encoding Start Date
+                  <input
+                    type="date"
+                    readOnly
+                    value={academic.gradeEncodingStartDate}
+                    className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-slate-600"
+                  />
+                </label>
+                <label className="font-medium text-slate-600">
+                  Grade Encoding Deadline
+                  <input
+                    type="date"
+                    value={academic.gradeEncodingDeadline}
+                    onChange={(event) =>
+                      setSection("academic", {
+                        ...academic,
+                        gradeEncodingDeadline: event.target.value,
+                      })
+                    }
+                    className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 outline-none focus:ring-2 focus:ring-slate-200"
+                  />
+                  {errors.gradeEncodingDeadline ? (
+                    <span className="mt-1 block text-rose-600">
+                      {errors.gradeEncodingDeadline}
+                    </span>
+                  ) : null}
+                </label>
+                <label className="font-medium text-slate-600">
+                  Grade Encoding Status
+                  <select
+                    value={academic.gradeEncodingStatus}
+                    onChange={(event) => {
+                      const status = event.target.value as
+                        | "OPEN"
+                        | "LOCKED"
+                        | "";
+                      setSection("academic", {
+                        ...academic,
+                        gradeEncodingStatus: status,
+                        gradePublishingStatus: status,
+                      });
+                    }}
+                    className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 outline-none focus:ring-2 focus:ring-slate-200"
+                  >
+                    <option value="">Unavailable</option>
+                    <option value="OPEN">Open</option>
+                    <option value="LOCKED">Locked</option>
+                  </select>
+                </label>
+                <label className="font-medium text-slate-600">
+                  Grade Publishing Status
+                  <input
+                    readOnly
+                    value={
+                      academic.gradePublishingStatus
+                        ? academic.gradePublishingStatus === "OPEN"
+                          ? "Open"
+                          : "Locked"
+                        : "Unavailable"
+                    }
+                    className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-slate-600"
+                  />
+                </label>
+              </div>
+              <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {[
+                  [
+                    "Assigned Classes",
+                    gradeProgress?.totals?.assignedClasses,
+                  ],
+                  ["Published", gradeProgress?.totals?.publishedClasses],
+                  ["Draft", gradeProgress?.totals?.draftClasses],
+                  ["Not Submitted", gradeProgress?.totals?.missingClasses],
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                  >
+                    <p className="text-slate-500">{label}</p>
+                    <p className="mt-1 text-2xl font-bold text-slate-900">
+                      {value ?? "—"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {gradeProgress?.teachers.length ? (
+                <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full min-w-[680px] text-left">
+                    <thead className="bg-slate-50 text-slate-600">
+                      <tr>
+                        <th className="px-4 py-3">Teacher</th>
+                        <th className="px-4 py-3 text-center">Classes</th>
+                        <th className="px-4 py-3 text-center">Published</th>
+                        <th className="px-4 py-3 text-center">Draft</th>
+                        <th className="px-4 py-3 text-center">Missing</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {gradeProgress.teachers.map((teacher) => (
+                        <tr key={teacher.teacherId}>
+                          <td className="px-4 py-3 font-medium text-slate-900">
+                            {teacher.teacherName}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {teacher.assignedClasses}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {teacher.publishedClasses}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {teacher.draftClasses}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {teacher.missingClasses}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+              {gradeProgress?.publishedItems.length ? (
+                <div className="mt-5">
+                  <h3 className="font-semibold text-slate-900">
+                    Published Grade Locks
+                  </h3>
+                  <p className="mt-1 text-slate-500">
+                    Unlocking returns the selected published grades to draft.
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {paginatedPublishedLocks.map((item) => (
+                      <div
+                        key={item.gradeItemId}
+                        className="flex flex-col gap-3 rounded-xl border border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div>
+                          <p className="font-medium text-slate-900">
+                            {item.subject} · {item.className}
+                          </p>
+                          <p className="text-slate-500">
+                            {item.teacherName}
+                            {item.gradeLevel ? ` · ${item.gradeLevel}` : ""}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPendingUnlock(item.gradeItemId);
+                            setAdminPassword("");
+                            setPasswordError("");
+                          }}
+                          className="rounded-xl border border-amber-200 px-4 py-2 font-medium text-amber-700 hover:bg-amber-50"
+                        >
+                          Unlock Published Grades
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <PaginationControls
+                    page={publishedLocksPage}
+                    pageCount={publishedLocksPageCount}
+                    onPageChange={setPublishedLocksPage}
+                  />
+                </div>
+              ) : null}
+              <div className="mt-5">
+                <h3 className="font-semibold text-slate-900">
+                  Academic Audit Logs
+                </h3>
+                <div className="mt-3 space-y-2">
+                  {academicAudits.length ? (
+                    paginatedAcademicAudits.map((audit) => (
+                      <div
+                        key={audit.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 p-3"
+                      >
+                        <p className="font-medium text-slate-900">
+                          {audit.action.replaceAll("_", " ")}
+                        </p>
+                        <time className="text-slate-500">
+                          {new Date(audit.createdAt).toLocaleString()}
+                        </time>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-slate-500">
+                      No academic audit logs have been recorded.
+                    </p>
+                  )}
+                </div>
+                <PaginationControls
+                  page={academicAuditsPage}
+                  pageCount={academicAuditsPageCount}
+                  onPageChange={setAcademicAuditsPage}
                 />
               </div>
               <Actions
@@ -858,47 +1202,6 @@ export default function AdminSettingsPage() {
               />
             </AdminPanel>
           ) : null}
-          {activeTab === "appearance" ? (
-            <AdminPanel
-              title="Appearance Settings"
-              description="Select the preferred interface appearance."
-            >
-              <div className="grid gap-3 sm:grid-cols-3">
-                {(["light", "dark", "system"] as const).map((theme) => (
-                  <button
-                    key={theme}
-                    onClick={() =>
-                      setSection("appearance", { ...appearance, theme })
-                    }
-                    className={`rounded-2xl border p-5 text-left capitalize ${appearance.theme === theme ? "border-slate-900 ring-2 ring-slate-100" : "border-slate-200"}`}
-                  >
-                    <Palette className="h-5 w-5" />
-                    <span className="mt-4 block font-semibold">
-                      {theme} Theme
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <div className="mt-4">
-                <Toggle
-                  label="Compact Layout"
-                  value={appearance.compactLayout}
-                  onChange={(value) =>
-                    setSection("appearance", {
-                      ...appearance,
-                      compactLayout: value,
-                    })
-                  }
-                />
-              </div>
-              <Actions
-                dirty={dirty("appearance")}
-                saving={saving}
-                onReset={() => reset("appearance")}
-                onSave={() => requestSave("appearance")}
-              />
-            </AdminPanel>
-          ) : null}
           {activeTab === "system" ? (
             <AdminPanel
               title="System Information"
@@ -928,7 +1231,7 @@ export default function AdminSettingsPage() {
           ) : null}
         </div>
       </div>
-      {pendingSave || pendingLogoAction ? (
+      {pendingSave || pendingLogoAction || pendingUnlock ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
           <div
             role="dialog"
@@ -964,6 +1267,7 @@ export default function AdminSettingsPage() {
                 onClick={() => {
                   setPendingSave(null);
                   setPendingLogoAction(null);
+                  setPendingUnlock(null);
                   setAdminPassword("");
                   setPasswordError("");
                 }}

@@ -15,8 +15,60 @@ export type AcademicSettings = {
   currentSchoolYear: string;
   currentSemester: string;
   currentQuarter: string;
+  endOfSchoolYear: boolean;
   passingGrade: string;
   promotionPolicy: string;
+  gradeEncodingStartDate: string;
+  gradeEncodingDeadline: string;
+  gradeEncodingStatus: "OPEN" | "LOCKED" | "";
+  gradePublishingStatus: "OPEN" | "LOCKED" | "";
+};
+
+export type AcademicContext = {
+  currentSchoolYear: string;
+  currentSemester: string;
+  currentQuarter: string;
+  gradeEncodingQuarter: string;
+  endOfSchoolYear: boolean;
+  passingGrade: number | null;
+  promotionPolicy: string;
+  gradeEncodingStartDate: string;
+  gradeEncodingDeadline: string;
+  gradeEncodingStatus: "OPEN" | "LOCKED" | "UNAVAILABLE";
+  gradePublishingStatus: "OPEN" | "LOCKED" | "UNAVAILABLE";
+  lastUpdated: string | null;
+};
+
+export type GradeSubmissionProgress = {
+  academic: AcademicContext;
+  totals: {
+    assignedClasses: number;
+    draftClasses: number;
+    publishedClasses: number;
+    missingClasses: number;
+  } | null;
+  teachers: Array<{
+    teacherId: number;
+    teacherName: string;
+    assignedClasses: number;
+    draftClasses: number;
+    publishedClasses: number;
+    missingClasses: number;
+  }>;
+  publishedItems: Array<{
+    gradeItemId: number;
+    teacherName: string;
+    className: string;
+    gradeLevel: string | null;
+    subject: string;
+  }>;
+};
+
+export type AcademicAudit = {
+  id: number;
+  action: string;
+  role: string;
+  createdAt: string;
 };
 
 export type UserManagementSettings = {
@@ -96,4 +148,25 @@ export async function uploadSchoolLogo(file: File) {
 
 export async function removeSchoolLogo() {
   await api.delete("/api/admin/settings/branding/logo");
+}
+
+export async function getAcademicContext() {
+  const { data } = await api.get("/api/admin/settings/academic-context");
+  return data?.academic as AcademicContext;
+}
+
+export async function getGradeSubmissionProgress() {
+  const { data } = await api.get("/api/admin/settings/academic/progress");
+  return data?.progress as GradeSubmissionProgress;
+}
+
+export async function unlockPublishedGradeItem(gradeItemId: number) {
+  await api.patch(
+    `/api/admin/settings/academic/grade-items/${gradeItemId}/unlock`,
+  );
+}
+
+export async function getAcademicAuditLogs() {
+  const { data } = await api.get("/api/admin/settings/academic/audits");
+  return (Array.isArray(data?.audits) ? data.audits : []) as AcademicAudit[];
 }
