@@ -7,7 +7,7 @@ exports.deleteEvent = deleteEvent;
 const sequelize_1 = require("sequelize");
 const SchoolEvent_model_1 = require("../../db/models/SchoolEvent.model");
 const User_model_1 = require("../../db/models/User.model");
-async function listEvents(query, audienceRole) {
+async function listEvents(query, audienceRole, audienceContext) {
     const today = new Intl.DateTimeFormat("en-CA", {
         timeZone: "Asia/Manila",
         year: "numeric",
@@ -95,11 +95,21 @@ async function listEvents(query, audienceRole) {
                 audience === "section" ||
                 audience.startsWith("section:");
         if (audienceRole === "parent")
-            return audience === "all parents" ||
-                audience === "grade level" ||
-                audience.startsWith("grade level:") ||
-                audience === "section" ||
-                audience.startsWith("section:");
+            if (audience === "all parents")
+                return true;
+            else if (audience === "grade level")
+                return true;
+            else if (audience.startsWith("grade level:")) {
+                const target = audience.slice("grade level:".length).trim();
+                return target === String(audienceContext?.gradeLevel ?? "").toLowerCase();
+            }
+            else if (audience === "section")
+                return true;
+            else if (audience.startsWith("section:")) {
+                const target = audience.slice("section:".length).trim();
+                return (target === String(audienceContext?.sectionId ?? "").toLowerCase() ||
+                    target === String(audienceContext?.sectionName ?? "").toLowerCase());
+            }
         return false;
     });
 }

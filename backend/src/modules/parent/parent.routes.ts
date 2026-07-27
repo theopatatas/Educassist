@@ -7,6 +7,7 @@ import {
   create,
   getById,
   list,
+  linkedStudents,
   me,
   overview,
   remove,
@@ -16,6 +17,12 @@ import {
 const router = Router();
 
 router.get("/me", requireAuth, requireRole("parent"), me);
+router.get(
+  "/students",
+  requireAuth,
+  requireRole("parent"),
+  linkedStudents,
+);
 router.get("/overview", requireAuth, requireRole("parent"), overview);
 router.get(
   "/academic-sessions",

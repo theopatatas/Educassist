@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Menu, LogOut, Settings, UserCircle, X, GraduationCap } from "lucide-react";
+import { Menu, LogOut, Settings, UserCircle, X, GraduationCap, ShieldCheck } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/src/features/auth/hooks";
 import { api } from "@/src/lib/http/client";
@@ -9,6 +9,8 @@ import EventNotifications from "../EventNotifications";
 
 type TeacherHeaderProps = {
   onMenuClick: () => void;
+  basePath?: string;
+  takeover?: boolean;
 };
 
 const pageTitles: Record<string, string> = {
@@ -24,7 +26,11 @@ const pageTitles: Record<string, string> = {
   "/teacher/reports": "Reports",
 };
 
-export default function TeacherHeader({ onMenuClick }: TeacherHeaderProps) {
+export default function TeacherHeader({
+  onMenuClick,
+  basePath = "/teacher",
+  takeover = false,
+}: TeacherHeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { logout } = useAuth();
@@ -67,8 +73,16 @@ export default function TeacherHeader({ onMenuClick }: TeacherHeaderProps) {
     .join("");
 
   const activePageTitle =
+    takeover && pathname === basePath
+      ? "Dashboard"
+      :
     Object.entries(pageTitles).find(
-      ([href]) => pathname === href || pathname.startsWith(`${href}/`),
+      ([href]) => {
+        const scopedHref = `${basePath}${href.replace("/teacher", "")}`;
+        return (
+          pathname === scopedHref || pathname.startsWith(`${scopedHref}/`)
+        );
+      },
     )?.[1] || "Teacher Portal";
 
   const handleChangePassword = async () => {
@@ -133,18 +147,27 @@ export default function TeacherHeader({ onMenuClick }: TeacherHeaderProps) {
           </div>
 
           <div className="flex shrink-0 items-center gap-1 sm:gap-3 lg:gap-4">
-            <EventNotifications eventHref="/teacher/dashboard" />
+            {takeover ? (
+              <span className="hidden items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700 sm:inline-flex">
+                <ShieldCheck className="h-4 w-4" />
+                Active Takeover
+              </span>
+            ) : (
+              <EventNotifications eventHref="/teacher/dashboard" />
+            )}
 
             <div className="relative">
               <button
                 className="flex h-10 w-10 items-center justify-center rounded-full border bg-slate-100 text-sm font-semibold text-slate-700"
-                onClick={() => setShowProfileMenu((v) => !v)}
+                onClick={() =>
+                  takeover ? undefined : setShowProfileMenu((v) => !v)
+                }
                 aria-label="Open profile menu"
               >
-                {initials || "T"}
+                {takeover ? <ShieldCheck className="h-5 w-5" /> : initials || "T"}
               </button>
 
-              {showProfileMenu ? (
+              {showProfileMenu && !takeover ? (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowProfileMenu(false)} />
                   <div className="absolute right-0 z-50 mt-2 w-60 overflow-hidden rounded-xl border bg-white py-2 shadow-xl">

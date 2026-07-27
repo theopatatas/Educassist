@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/src/lib/http/client";
+import { useTeacherWorkspacePath } from "@/src/features/teacher/useTeacherWorkspacePath";
 import {
   Users,
   Clock,
@@ -239,6 +240,7 @@ function toggleSelectedDay(current: string[], day: string) {
 }
 
 export default function TeacherClassesPage() {
+  const { isTakeover } = useTeacherWorkspacePath();
   const [classes, setClasses] = useState<ClassItem[]>(initialClasses);
   const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -645,7 +647,11 @@ export default function TeacherClassesPage() {
       <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">My Classes</h1>
-          <p className="text-gray-500">Manage your sections and schedules</p>
+          <p className="text-gray-500">
+            {isTakeover
+              ? "View the affected classes and student rosters"
+              : "Manage your sections and schedules"}
+          </p>
         </div>
         <div className="flex w-full flex-wrap items-center gap-3 [&>*]:w-full sm:[&>*]:w-auto md:w-auto">
           <select
@@ -672,13 +678,15 @@ export default function TeacherClassesPage() {
               </option>
             ))}
           </select>
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="flex h-10 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 font-medium text-white shadow-lg shadow-indigo-200 transition-colors hover:bg-indigo-700"
-          >
-            <Plus className="h-5 w-5" />
-            Add New Class
-          </button>
+          {!isTakeover ? (
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="flex h-10 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 font-medium text-white shadow-lg shadow-indigo-200 transition-colors hover:bg-indigo-700"
+            >
+              <Plus className="h-5 w-5" />
+              Add New Class
+            </button>
+          ) : null}
         </div>
       </div>
       {saveError ? (
@@ -748,7 +756,7 @@ export default function TeacherClassesPage() {
           </div>
         ))}
 
-        <button
+        {!isTakeover ? <button
           onClick={() => setIsAddModalOpen(true)}
           className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-300 p-6 text-gray-400 transition-all hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600"
         >
@@ -757,7 +765,7 @@ export default function TeacherClassesPage() {
           </div>
           <span className="mb-1 text-lg font-bold">Schedule New Class</span>
           <span className="text-sm text-gray-400">Add a new section to your load</span>
-        </button>
+        </button> : null}
       </div>
       {!isLoading && filteredClasses.length === 0 ? (
         <div className="mt-6 rounded-2xl border border-gray-100 bg-white p-8 text-center text-sm text-gray-500 shadow-sm">
@@ -793,18 +801,22 @@ export default function TeacherClassesPage() {
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => openEditModal(selectedClass)}
-                    className="rounded-xl bg-white/20 p-2 transition-colors hover:bg-white/30"
-                  >
-                    <Edit2 className="h-5 w-5" />
-                  </button>
-                  <button
-                    onClick={openDeleteModal}
-                    className="rounded-xl bg-white/20 p-2 transition-colors hover:bg-white/30"
-                  >
-                    <Trash2 className="h-5 w-5" />
-                  </button>
+                  {!isTakeover ? (
+                    <>
+                      <button
+                        onClick={() => openEditModal(selectedClass)}
+                        className="rounded-xl bg-white/20 p-2 transition-colors hover:bg-white/30"
+                      >
+                        <Edit2 className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={openDeleteModal}
+                        className="rounded-xl bg-white/20 p-2 transition-colors hover:bg-white/30"
+                      >
+                        <Trash2 className="h-5 w-5" />
+                      </button>
+                    </>
+                  ) : null}
                   <button
                     onClick={closeClassDetails}
                     className="rounded-xl bg-white/20 p-2 transition-colors hover:bg-white/30"
@@ -840,7 +852,7 @@ export default function TeacherClassesPage() {
         </div>
       ) : null}
 
-      {isDeleteModalOpen && selectedClass ? (
+      {isDeleteModalOpen && selectedClass && !isTakeover ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
             <div className="mb-4">
@@ -893,7 +905,7 @@ export default function TeacherClassesPage() {
         </div>
       ) : null}
 
-      {isEditModalOpen ? (
+      {isEditModalOpen && !isTakeover ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-gray-100 p-6">
@@ -1044,7 +1056,7 @@ export default function TeacherClassesPage() {
         </div>
       ) : null}
 
-      {isAddModalOpen ? (
+      {isAddModalOpen && !isTakeover ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-gray-100 p-6">

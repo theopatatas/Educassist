@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/src/lib/http/client";
+import { useTeacherWorkspacePath } from "@/src/features/teacher/useTeacherWorkspacePath";
 import AcademicDashboardBadges from "../../AcademicDashboardBadges";
 import {
   BookOpen,
@@ -137,6 +138,7 @@ function getStartDateTimeTimestamp(isoDate: string, time?: string | null) {
 
 export default function TeacherDashboard() {
   const router = useRouter();
+  const { workspacePath, isTakeover } = useTeacherWorkspacePath();
   const [teacherName, setTeacherName] = useState("Teacher");
   const [teacherClasses, setTeacherClasses] = useState<ApiClass[]>([]);
   const [teacherLeaves, setTeacherLeaves] = useState<DashboardLeave[]>([]);
@@ -505,7 +507,7 @@ export default function TeacherDashboard() {
                     type="button"
                     onClick={
                       isTeacherSummaryCard
-                        ? () => router.push("/teacher/classes")
+                        ? () => router.push(workspacePath("classes"))
                         : undefined
                     }
                     className={`flex w-full items-center gap-4 rounded-2xl bg-white p-6 text-left shadow-md ${
@@ -537,7 +539,7 @@ export default function TeacherDashboard() {
                   Upcoming, current, and recently reviewed requests.
                 </p>
               </div>
-              <button type="button" onClick={() => router.push("/teacher/leave-requests")} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50">
+              <button type="button" onClick={() => router.push(isTakeover ? "/admin/leave-management" : workspacePath("leave-requests"))} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50">
                 View Leave Requests
               </button>
             </div>
@@ -560,7 +562,7 @@ export default function TeacherDashboard() {
                 <p className="text-sm font-semibold text-slate-700">Recent Leave Requests</p>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {teacherLeaves.slice(0, 3).map((leave) => (
-                    <button key={leave.id} type="button" onClick={() => router.push("/teacher/leave-requests")} className="rounded-xl border border-slate-100 p-3 text-left hover:bg-slate-50">
+                    <button key={leave.id} type="button" onClick={() => router.push(isTakeover ? "/admin/leave-management" : workspacePath("leave-requests"))} className="rounded-xl border border-slate-100 p-3 text-left hover:bg-slate-50">
                       <p className="text-sm font-semibold">{leave.leaveType}</p>
                       <p className="mt-1 text-xs text-slate-500">{leave.startDate} – {leave.endDate} · {leave.status.replaceAll("_", " ")}</p>
                     </button>

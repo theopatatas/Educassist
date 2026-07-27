@@ -230,6 +230,9 @@ async function applySchemaPatches() {
         // Ignore if table does not exist yet during first boot; sync will create it.
     }
 }
+async function backfillParentStudentLinks() {
+    await db_1.sequelize.query("INSERT IGNORE INTO `parent_students` (`parent_id`, `student_id`, `created_at`, `updated_at`) SELECT `id`, `student_id`, NOW(), NOW() FROM `parents` WHERE `student_id` IS NOT NULL;");
+}
 async function seedReferenceData() {
     for (const subject of DEFAULT_SUBJECTS) {
         const existing = await models_1.Subject.findOne({ where: { name: subject.name } });
@@ -272,6 +275,7 @@ async function initializeDatabase(options) {
     // Avoid repeated ALTER operations that can duplicate indexes in MySQL.
     await db_1.sequelize.sync({ force: options?.force ?? false });
     await applySchemaPatches();
+    await backfillParentStudentLinks();
     await seedReferenceData();
     await seedAdminUser();
 }

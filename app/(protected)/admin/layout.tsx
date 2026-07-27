@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/src/features/auth/hooks";
 import AdminHeader from "./AdminHeader";
 import AdminSidebar from "./AdminSidebar";
@@ -12,6 +12,7 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, hydrated } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -23,6 +24,11 @@ export default function AdminLayout({
 
   if (!hydrated) return null;
   if (!user || user.role !== "super_admin") return null;
+  if (
+    /^\/admin\/leave-management\/\d+\/workspace(?:\/|$)/.test(pathname)
+  ) {
+    return children;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">

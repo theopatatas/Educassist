@@ -19,6 +19,7 @@ const mail_1 = require("../../utils/mail");
 const PasswordResetOtp_model_1 = require("../../db/models/PasswordResetOtp.model");
 const StudentSignupOtp_model_1 = require("../../db/models/StudentSignupOtp.model");
 const Parent_model_1 = require("../../db/models/Parent.model");
+const ParentStudent_model_1 = require("../../db/models/ParentStudent.model");
 const Section_model_1 = require("../../db/models/Section.model");
 const Student_model_1 = require("../../db/models/Student.model");
 const User_model_1 = require("../../db/models/User.model");
@@ -51,6 +52,11 @@ async function ensureGuardianAccountForStudent(input, studentId, transaction) {
                 lastName: guardianLastName,
             }, { transaction });
         }
+        await ParentStudent_model_1.ParentStudent.findOrCreate({
+            where: { parentId: existingParent.id, studentId },
+            defaults: { parentId: existingParent.id, studentId },
+            transaction,
+        });
         return;
     }
     let loginId = guardianContact;
@@ -66,13 +72,14 @@ async function ensureGuardianAccountForStudent(input, studentId, transaction) {
         role: "parent",
         refreshTokenHash: null,
     }, { transaction });
-    await Parent_model_1.Parent.create({
+    const parent = await Parent_model_1.Parent.create({
         userId: guardianUser.id,
         firstName: guardianFirstName,
         lastName: guardianLastName,
         phone: guardianContact,
         studentId,
     }, { transaction });
+    await ParentStudent_model_1.ParentStudent.create({ parentId: parent.id, studentId }, { transaction });
 }
 async function registerUser(input) {
     const normalizedEmail = input.email.trim().toLowerCase();

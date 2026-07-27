@@ -18,6 +18,7 @@ import {
 import { useRouter } from "next/navigation";
 import { api } from "@/src/lib/http/client";
 import { sanitizeTeacherSentence } from "@/src/lib/utils/teacherInput";
+import { useTeacherWorkspacePath } from "@/src/features/teacher/useTeacherWorkspacePath";
 
 type TeacherClass = {
   id: number;
@@ -117,6 +118,7 @@ export default function TeacherAssistantPage({
   initialTab = "quiz",
 }: TeacherAssistantPageProps = {}) {
   const router = useRouter();
+  const { workspacePath } = useTeacherWorkspacePath();
   const [tab, setTab] = useState<"quiz" | "lesson">(initialTab);
   const [classes, setClasses] = useState<TeacherClass[]>([]);
   const [busy, setBusy] = useState(false);
@@ -319,7 +321,7 @@ export default function TeacherAssistantPage({
       const id = Number(data?.quiz?.id);
       await api.put(`/api/quizzes/${id}/questions`, { questions });
       setNotice("Quiz saved to Quiz Center successfully.");
-      router.push(`/teacher/quiz-center/${id}/builder`);
+      router.push(workspacePath(`quiz-center/${id}/builder`));
     } catch (requestError: unknown) {
       setError(
         (requestError as { response?: { data?: { message?: string } } })
@@ -788,7 +790,7 @@ export default function TeacherAssistantPage({
                     key={item.id}
                     type="button"
                     onClick={() =>
-                      router.push(`/teacher/quiz-center/${item.id}/builder`)
+                      router.push(workspacePath(`quiz-center/${item.id}/builder`))
                     }
                     className="rounded-xl border border-slate-200 p-4 text-left transition hover:border-indigo-300 hover:bg-indigo-50/30"
                   >

@@ -61,6 +61,13 @@ export function attachAuthInterceptor(client: AxiosInstance) {
       config.headers.Authorization = `Bearer ${auth.accessToken}`;
     }
     if (typeof window !== "undefined" && auth?.accessToken) {
+      const takeoverMatch = window.location.pathname.match(
+        /^\/admin\/leave-management\/(\d+)\/workspace(?:\/|$)/,
+      );
+      if (takeoverMatch) {
+        config.headers = config.headers ?? {};
+        config.headers["X-EducAssist-Takeover"] = takeoverMatch[1];
+      }
       markUserActivity();
     }
     return config;

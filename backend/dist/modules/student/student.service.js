@@ -25,6 +25,7 @@ const Class_model_1 = require("../../db/models/Class.model");
 const Grade_model_1 = require("../../db/models/Grade.model");
 const GradeItem_model_1 = require("../../db/models/GradeItem.model");
 const Parent_model_1 = require("../../db/models/Parent.model");
+const ParentStudent_model_1 = require("../../db/models/ParentStudent.model");
 const Section_model_1 = require("../../db/models/Section.model");
 const Student_model_1 = require("../../db/models/Student.model");
 const Subject_model_1 = require("../../db/models/Subject.model");
@@ -55,6 +56,11 @@ async function ensureGuardianAccountForStudent(input, studentId, transaction) {
                 lastName: guardianLastName,
             }, { transaction });
         }
+        await ParentStudent_model_1.ParentStudent.findOrCreate({
+            where: { parentId: existingParent.id, studentId },
+            defaults: { parentId: existingParent.id, studentId },
+            transaction,
+        });
         return;
     }
     let loginId = guardianContact;
@@ -70,13 +76,20 @@ async function ensureGuardianAccountForStudent(input, studentId, transaction) {
         role: "parent",
         refreshTokenHash: null,
     }, { transaction });
-    await Parent_model_1.Parent.create({
+    const parent = await Parent_model_1.Parent.create({
         userId: guardianUser.id,
         firstName: guardianFirstName,
         lastName: guardianLastName,
         phone: guardianContact,
         studentId,
     }, { transaction });
+    await ParentStudent_model_1.ParentStudent.create({ parentId: parent.id, studentId }, { transaction });
+}
+async function findParentForStudent(studentId) {
+    const link = await ParentStudent_model_1.ParentStudent.findOne({ where: { studentId } });
+    return link
+        ? Parent_model_1.Parent.findByPk(link.parentId)
+        : Parent_model_1.Parent.findOne({ where: { studentId } });
 }
 async function createStudent(input) {
     return db_1.sequelize.transaction(async (t) => {
@@ -178,7 +191,8 @@ async function listStudents() {
         return [];
     const userIds = students.map((s) => Number(s.userId)).filter(Boolean);
     const sectionIds = students.map((s) => Number(s.sectionId)).filter(Boolean);
-    const [users, sections, parents] = await Promise.all([
+    const studentIds = students.map((student) => Number(student.id));
+    const [users, sections, parentLinks] = await Promise.all([
         userIds.length
             ? User_model_1.User.findAll({
                 where: { id: userIds },
@@ -191,8 +205,17 @@ async function listStudents() {
                 attributes: ["id", "name"],
             })
             : Promise.resolve([]),
-        Parent_model_1.Parent.findAll({
-            where: { studentId: students.map((student) => Number(student.id)) },
+        ParentStudent_model_1.ParentStudent.findAll({
+            where: { studentId: studentIds },
+            attributes: ["parentId", "studentId"],
+        }),
+    ]);
+    const parentIds = [
+        ...new Set(parentLinks.map((link) => Number(link.parentId))),
+    ];
+    const parents = parentIds.length
+        ? await Parent_model_1.Parent.findAll({
+            where: { id: parentIds },
             attributes: [
                 "id",
                 "userId",
@@ -201,12 +224,17 @@ async function listStudents() {
                 "lastName",
                 "phone",
             ],
-        }),
-    ]);
+        })
+        : [];
     const userEmailById = new Map(users.map((u) => [Number(u.id), u.email]));
     const userActiveById = new Map(users.map((u) => [Number(u.id), Boolean(u.isActive)]));
     const sectionNameById = new Map(sections.map((s) => [Number(s.id), s.name]));
-    const parentByStudentId = new Map(parents.map((parent) => [Number(parent.studentId), parent.toJSON()]));
+    const parentByStudentId = new Map(parentLinks.flatMap((link) => {
+        const parent = parents.find((item) => Number(item.id) === Number(link.parentId));
+        return parent
+            ? [[Number(link.studentId), parent.toJSON()]]
+            : [];
+    }));
     return students.map((student) => {
         const raw = student.toJSON();
         return {
@@ -229,7 +257,7 @@ async function getStudentDetailsById(id) {
         student.sectionId
             ? Section_model_1.Section.findByPk(student.sectionId, { attributes: ["id", "name"] })
             : null,
-        Parent_model_1.Parent.findOne({ where: { studentId: student.id } }),
+        findParentForStudent(Number(student.id)),
     ]);
     return {
         ...student.toJSON(),
@@ -664,7 +692,7 @@ async function updateStudent(id, data) {
             refreshTokenHash: data.isActive === false || data.archived ? null : user.refreshTokenHash,
         });
     }
-    const parent = await Parent_model_1.Parent.findOne({ where: { studentId: student.id } });
+    const parent = await findParentForStudent(Number(student.id));
     if (parent &&
         (data.guardianName !== undefined || data.guardianContact !== undefined)) {
         const parts = data.guardianName?.trim().split(/\s+/).filter(Boolean) ?? [];

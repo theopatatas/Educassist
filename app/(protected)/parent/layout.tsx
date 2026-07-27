@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/src/features/auth/hooks";
 import ParentHeader from "./ParentHeader";
+import { ParentStudentProvider } from "./ParentStudentContext";
 
 export default function ParentLayout({
   children,
@@ -23,9 +24,11 @@ export default function ParentLayout({
   if (!user || user.role !== "parent") return null;
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <ParentHeader />
-      <main className="p-6">{children}</main>
-    </div>
+    <ParentStudentProvider>
+      <div className="min-h-screen bg-slate-50">
+        <ParentHeader />
+        <main className="p-3 sm:p-6">{children}</main>
+      </div>
+    </ParentStudentProvider>
   );
 }

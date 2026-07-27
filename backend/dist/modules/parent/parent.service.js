@@ -7,6 +7,9 @@ exports.createParent = createParent;
 exports.listParents = listParents;
 exports.getParentById = getParentById;
 exports.getParentByUserId = getParentByUserId;
+exports.getParentLinkedStudentsByUserId = getParentLinkedStudentsByUserId;
+exports.parentCanAccessStudent = parentCanAccessStudent;
+exports.getParentSelectedStudentByUserId = getParentSelectedStudentByUserId;
 exports.getParentAcademicSessionsByUserId = getParentAcademicSessionsByUserId;
 exports.getParentAcademicRecordByUserId = getParentAcademicRecordByUserId;
 exports.getParentOverviewByUserId = getParentOverviewByUserId;
@@ -22,6 +25,8 @@ const Exam_model_1 = require("../../db/models/Exam.model");
 const Grade_model_1 = require("../../db/models/Grade.model");
 const GradeItem_model_1 = require("../../db/models/GradeItem.model");
 const Parent_model_1 = require("../../db/models/Parent.model");
+const ParentStudent_model_1 = require("../../db/models/ParentStudent.model");
+const Section_model_1 = require("../../db/models/Section.model");
 const QuizAttempt_model_1 = require("../../db/models/QuizAttempt.model");
 const Student_model_1 = require("../../db/models/Student.model");
 const User_model_1 = require("../../db/models/User.model");
@@ -54,6 +59,19 @@ async function createParent(input) {
             phone: input.phone ?? null,
             studentId: input.studentId ?? null,
         }, { transaction: t });
+        if (input.studentId) {
+            await ParentStudent_model_1.ParentStudent.findOrCreate({
+                where: {
+                    parentId: parent.id,
+                    studentId: Number(input.studentId),
+                },
+                defaults: {
+                    parentId: parent.id,
+                    studentId: Number(input.studentId),
+                },
+                transaction: t,
+            });
+        }
         return {
             ok: true,
             parent,
@@ -70,29 +88,149 @@ async function getParentById(id) {
 async function getParentByUserId(userId) {
     return Parent_model_1.Parent.findOne({ where: { userId } });
 }
-async function getParentAcademicSessionsByUserId(userId) {
+async function linkedStudentIds(parent) {
+    const links = await ParentStudent_model_1.ParentStudent.findAll({
+        where: { parentId: parent.id },
+        attributes: ["studentId"],
+    });
+    const ids = links.map((link) => Number(link.studentId));
+    if (parent.studentId)
+        ids.push(Number(parent.studentId));
+    return [...new Set(ids.filter(Boolean))];
+}
+async function getParentLinkedStudentsByUserId(userId) {
     const parent = await Parent_model_1.Parent.findOne({ where: { userId } });
     if (!parent)
         return null;
-    if (!parent.studentId)
+    const ids = await linkedStudentIds(parent);
+    if (!ids.length)
         return [];
-    return (0, student_service_1.getStudentAcademicSessionsById)(String(parent.studentId));
+    const students = await Student_model_1.Student.findAll({
+        where: { id: ids },
+        attributes: [
+            "id",
+            "firstName",
+            "middleName",
+            "lastName",
+            "yearLevel",
+            "sectionId",
+            "graduatedAt",
+            "archivedAt",
+        ],
+    });
+    const sectionIds = students
+        .map((student) => Number(student.sectionId))
+        .filter(Boolean);
+    const sections = sectionIds.length
+        ? await Section_model_1.Section.findAll({
+            where: { id: sectionIds },
+            attributes: ["id", "name"],
+        })
+        : [];
+    const sectionNames = new Map(sections.map((section) => [Number(section.id), section.name]));
+    return students
+        .map((student) => ({
+        id: Number(student.id),
+        name: [student.firstName, student.middleName, student.lastName]
+            .filter(Boolean)
+            .join(" "),
+        gradeLevel: student.yearLevel ?? null,
+        sectionId: student.sectionId ? Number(student.sectionId) : null,
+        sectionName: student.sectionId
+            ? sectionNames.get(Number(student.sectionId)) ?? null
+            : null,
+        graduated: Boolean(student.graduatedAt),
+        archived: Boolean(student.archivedAt),
+        primary: Number(parent.studentId) === Number(student.id),
+    }))
+        .sort((left, right) => {
+        if (left.primary !== right.primary)
+            return left.primary ? -1 : 1;
+        if (left.archived !== right.archived)
+            return left.archived ? 1 : -1;
+        return left.name.localeCompare(right.name);
+    });
+}
+async function resolveParentStudent(parent, requestedStudentId) {
+    const ids = await linkedStudentIds(parent);
+    if (!ids.length)
+        return { student: null, allowed: true };
+    const requested = requestedStudentId ? Number(requestedStudentId) : null;
+    if (requested && !ids.includes(requested))
+        return { student: null, allowed: false };
+    const selectedId = requested ||
+        (parent.studentId && ids.includes(Number(parent.studentId))
+            ? Number(parent.studentId)
+            : ids[0]);
+    return {
+        student: await Student_model_1.Student.findByPk(selectedId),
+        allowed: true,
+    };
+}
+async function parentCanAccessStudent(userId, requestedStudentId) {
+    const parent = await Parent_model_1.Parent.findOne({ where: { userId } });
+    if (!parent)
+        return null;
+    const selected = await resolveParentStudent(parent, requestedStudentId);
+    return selected.allowed;
+}
+async function getParentSelectedStudentByUserId(userId, requestedStudentId) {
+    const parent = await Parent_model_1.Parent.findOne({ where: { userId } });
+    if (!parent)
+        return null;
+    const selected = await resolveParentStudent(parent, requestedStudentId);
+    if (!selected.allowed)
+        return { forbidden: true };
+    if (!selected.student)
+        return { student: null };
+    const section = selected.student.sectionId
+        ? await Section_model_1.Section.findByPk(selected.student.sectionId, {
+            attributes: ["id", "name"],
+        })
+        : null;
+    return {
+        student: {
+            id: Number(selected.student.id),
+            gradeLevel: selected.student.yearLevel ?? null,
+            sectionId: selected.student.sectionId
+                ? Number(selected.student.sectionId)
+                : null,
+            sectionName: section?.name ?? null,
+        },
+    };
+}
+async function getParentAcademicSessionsByUserId(userId, requestedStudentId) {
+    const parent = await Parent_model_1.Parent.findOne({ where: { userId } });
+    if (!parent)
+        return null;
+    const selected = await resolveParentStudent(parent, requestedStudentId);
+    if (!selected.allowed)
+        return { forbidden: true };
+    if (!selected.student)
+        return [];
+    return (0, student_service_1.getStudentAcademicSessionsById)(String(selected.student.id));
 }
 async function getParentAcademicRecordByUserId(userId, filter) {
     const parent = await Parent_model_1.Parent.findOne({ where: { userId } });
     if (!parent)
         return null;
-    if (!parent.studentId)
+    const selected = await resolveParentStudent(parent, filter?.studentId);
+    if (!selected.allowed)
+        return { forbidden: true };
+    if (!selected.student)
         return { linkedStudent: false, record: null };
-    const record = await (0, student_service_1.getStudentAcademicRecordById)(String(parent.studentId), filter);
+    const record = await (0, student_service_1.getStudentAcademicRecordById)(String(selected.student.id), filter);
     return { linkedStudent: true, record };
 }
-async function getParentOverviewByUserId(userId) {
+async function getParentOverviewByUserId(userId, requestedStudentId) {
     const academic = await (0, settings_service_1.getAcademicContext)();
     const parent = await Parent_model_1.Parent.findOne({ where: { userId } });
     if (!parent)
         return null;
-    if (!parent.studentId) {
+    const selected = await resolveParentStudent(parent, requestedStudentId);
+    if (!selected.allowed)
+        return { forbidden: true };
+    if (!selected.student) {
         return {
             linkedStudent: null,
             attendance: { present: 0, late: 0, absent: 0, rate: 0 },
@@ -147,7 +285,7 @@ async function getParentOverviewByUserId(userId) {
             ],
         };
     }
-    const student = await Student_model_1.Student.findByPk(parent.studentId);
+    const student = selected.student;
     if (!student) {
         return {
             linkedStudent: null,
@@ -402,6 +540,12 @@ async function updateParent(id, data) {
         phone: data.phone ?? parent.phone,
         studentId: data.studentId ?? parent.studentId,
     });
+    if (data.studentId) {
+        await ParentStudent_model_1.ParentStudent.findOrCreate({
+            where: { parentId: parent.id, studentId: Number(data.studentId) },
+            defaults: { parentId: parent.id, studentId: Number(data.studentId) },
+        });
+    }
     return parent;
 }
 async function deleteParent(id) {

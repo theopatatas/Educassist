@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/src/lib/http/client";
+import { useTeacherWorkspacePath } from "@/src/features/teacher/useTeacherWorkspacePath";
 import {
   BookOpen,
   Calculator,
@@ -198,6 +199,7 @@ function QuizSubjectIcon({ subject }: { subject: string }) {
 
 export default function TeacherQuizCenterPage() {
   const router = useRouter();
+  const { workspacePath } = useTeacherWorkspacePath();
   const [quizzes, setQuizzes] = useState<QuizItem[]>([]);
   const [teacherClasses, setTeacherClasses] = useState<TeacherClass[]>([]);
   const [selectedSection, setSelectedSection] = useState(() => {
@@ -436,7 +438,7 @@ export default function TeacherQuizCenterPage() {
       handleCelebrate();
       const createdId = Number(data?.quiz?.id ?? 0);
       if (createdId) {
-        router.push(`/teacher/quiz-center/${createdId}/builder`);
+        router.push(workspacePath(`quiz-center/${createdId}/builder`));
       }
     } catch (err: unknown) {
       const message =
@@ -743,7 +745,7 @@ export default function TeacherQuizCenterPage() {
                 <div className="flex gap-3">
                   <button
                     type="button"
-                  onClick={() => router.push(`/teacher/quiz-center/${selectedQuiz.id}/builder`)}
+                  onClick={() => router.push(workspacePath(`quiz-center/${selectedQuiz.id}/builder`))}
                   className="rounded-xl border border-indigo-200 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50"
                 >
                   Edit Questions

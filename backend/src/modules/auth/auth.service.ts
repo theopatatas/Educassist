@@ -5,6 +5,7 @@ import { sendMail } from "../../utils/mail";
 import { PasswordResetOtp } from "../../db/models/PasswordResetOtp.model";
 import { StudentSignupOtp } from "../../db/models/StudentSignupOtp.model";
 import { Parent } from "../../db/models/Parent.model";
+import { ParentStudent } from "../../db/models/ParentStudent.model";
 import { Section } from "../../db/models/Section.model";
 import { Student } from "../../db/models/Student.model";
 import { User } from "../../db/models/User.model";
@@ -59,6 +60,11 @@ async function ensureGuardianAccountForStudent(
         { transaction },
       );
     }
+    await ParentStudent.findOrCreate({
+      where: { parentId: existingParent.id, studentId },
+      defaults: { parentId: existingParent.id, studentId },
+      transaction,
+    });
     return;
   }
 
@@ -80,7 +86,7 @@ async function ensureGuardianAccountForStudent(
     { transaction },
   );
 
-  await Parent.create(
+  const parent = await Parent.create(
     {
       userId: guardianUser.id,
       firstName: guardianFirstName,
@@ -88,6 +94,10 @@ async function ensureGuardianAccountForStudent(
       phone: guardianContact,
       studentId,
     },
+    { transaction },
+  );
+  await ParentStudent.create(
+    { parentId: parent.id, studentId },
     { transaction },
   );
 }

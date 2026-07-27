@@ -15,7 +15,13 @@ type EventNotice = {
   source: "event" | "system";
 };
 
-export default function EventNotifications({ eventHref }: { eventHref: string }) {
+export default function EventNotifications({
+  eventHref,
+  studentId,
+}: {
+  eventHref: string;
+  studentId?: number | null;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [notices, setNotices] = useState<EventNotice[]>([]);
@@ -25,7 +31,9 @@ export default function EventNotifications({ eventHref }: { eventHref: string })
   const load = useCallback(async () => {
     try {
       const [eventResult, systemResult] = await Promise.allSettled([
-        api.get("/api/events/notifications"),
+        api.get("/api/events/notifications", {
+          params: studentId ? { studentId } : undefined,
+        }),
         api.get("/api/leaves/notifications"),
       ]);
       const eventRows =
@@ -77,7 +85,7 @@ export default function EventNotifications({ eventHref }: { eventHref: string })
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [studentId]);
 
   useEffect(() => {
     void load();

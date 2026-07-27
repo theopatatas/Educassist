@@ -11,6 +11,7 @@ import { Class } from "../../db/models/Class.model";
 import { Grade } from "../../db/models/Grade.model";
 import { GradeItem } from "../../db/models/GradeItem.model";
 import { Parent } from "../../db/models/Parent.model";
+import { ParentStudent } from "../../db/models/ParentStudent.model";
 import { Section } from "../../db/models/Section.model";
 import { Student } from "../../db/models/Student.model";
 import { Subject } from "../../db/models/Subject.model";
@@ -99,6 +100,11 @@ async function ensureGuardianAccountForStudent(
         { transaction },
       );
     }
+    await ParentStudent.findOrCreate({
+      where: { parentId: existingParent.id, studentId },
+      defaults: { parentId: existingParent.id, studentId },
+      transaction,
+    });
     return;
   }
 
@@ -120,7 +126,7 @@ async function ensureGuardianAccountForStudent(
     { transaction },
   );
 
-  await Parent.create(
+  const parent = await Parent.create(
     {
       userId: guardianUser.id,
       firstName: guardianFirstName,
@@ -130,6 +136,17 @@ async function ensureGuardianAccountForStudent(
     },
     { transaction },
   );
+  await ParentStudent.create(
+    { parentId: parent.id, studentId },
+    { transaction },
+  );
+}
+
+async function findParentForStudent(studentId: number) {
+  const link = await ParentStudent.findOne({ where: { studentId } });
+  return link
+    ? Parent.findByPk(link.parentId)
+    : Parent.findOne({ where: { studentId } });
 }
 
 export async function createStudent(input: CreateStudentInput) {
@@ -248,7 +265,8 @@ export async function listStudents() {
 
   const userIds = students.map((s) => Number(s.userId)).filter(Boolean);
   const sectionIds = students.map((s) => Number(s.sectionId)).filter(Boolean);
-  const [users, sections, parents] = await Promise.all([
+  const studentIds = students.map((student) => Number(student.id));
+  const [users, sections, parentLinks] = await Promise.all([
     userIds.length
       ? User.findAll({
           where: { id: userIds },
@@ -261,8 +279,17 @@ export async function listStudents() {
           attributes: ["id", "name"],
         })
       : Promise.resolve([]),
-    Parent.findAll({
-      where: { studentId: students.map((student) => Number(student.id)) },
+    ParentStudent.findAll({
+      where: { studentId: studentIds },
+      attributes: ["parentId", "studentId"],
+    }),
+  ]);
+  const parentIds = [
+    ...new Set(parentLinks.map((link) => Number(link.parentId))),
+  ];
+  const parents = parentIds.length
+    ? await Parent.findAll({
+      where: { id: parentIds },
       attributes: [
         "id",
         "userId",
@@ -271,15 +298,22 @@ export async function listStudents() {
         "lastName",
         "phone",
       ],
-    }),
-  ]);
+    })
+    : [];
   const userEmailById = new Map(users.map((u) => [Number(u.id), u.email]));
   const userActiveById = new Map(
     users.map((u) => [Number(u.id), Boolean(u.isActive)]),
   );
   const sectionNameById = new Map(sections.map((s) => [Number(s.id), s.name]));
   const parentByStudentId = new Map(
-    parents.map((parent) => [Number(parent.studentId), parent.toJSON()]),
+    parentLinks.flatMap((link) => {
+      const parent = parents.find(
+        (item) => Number(item.id) === Number(link.parentId),
+      );
+      return parent
+        ? [[Number(link.studentId), parent.toJSON()] as const]
+        : [];
+    }),
   );
 
   return students.map((student) => {
@@ -304,7 +338,7 @@ export async function getStudentDetailsById(id: string) {
     student.sectionId
       ? Section.findByPk(student.sectionId, { attributes: ["id", "name"] })
       : null,
-    Parent.findOne({ where: { studentId: student.id } }),
+    findParentForStudent(Number(student.id)),
   ]);
   return {
     ...student.toJSON(),
@@ -802,7 +836,7 @@ export async function updateStudent(id: string, data: UpdateStudentInput) {
         data.isActive === false || data.archived ? null : user.refreshTokenHash,
     });
   }
-  const parent = await Parent.findOne({ where: { studentId: student.id } });
+  const parent = await findParentForStudent(Number(student.id));
   if (
     parent &&
     (data.guardianName !== undefined || data.guardianContact !== undefined)

@@ -5,6 +5,10 @@ import {
   createAdminSubject,
   listAdminSubjects,
   overview,
+  analytics,
+  exportAnalytics,
+  pendingTasks,
+  recentActivities,
 } from "./admin.controller";
 import {
   deleteLogo,
@@ -22,6 +26,25 @@ import { schoolLogoUpload } from "./settings.upload";
 const router = Router();
 
 router.get("/overview", requireAuth, requireRole("admin"), overview);
+router.get("/analytics", requireAuth, requireRole("admin"), analytics);
+router.get(
+  "/analytics/export/:format",
+  requireAuth,
+  requireRole("admin"),
+  exportAnalytics,
+);
+router.get(
+  "/activities",
+  requireAuth,
+  requireRole("admin"),
+  recentActivities,
+);
+router.get(
+  "/pending-tasks",
+  requireAuth,
+  requireRole("admin"),
+  pendingTasks,
+);
 router.get(
   "/settings/academic-context",
   requireAuth,

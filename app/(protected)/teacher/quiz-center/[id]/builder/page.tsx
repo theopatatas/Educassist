@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/src/lib/http/client";
 import { ArrowLeft, CheckCircle2, Plus, Save, Trash2 } from "lucide-react";
+import { useTeacherWorkspacePath } from "@/src/features/teacher/useTeacherWorkspacePath";
 
 type QuestionType =
   | "multiple_choice"
@@ -53,9 +54,10 @@ function makeBlankQuestion(type: QuestionType = "multiple_choice"): BuilderQuest
 }
 
 export default function TeacherQuizBuilderPage() {
-  const params = useParams<{ id: string }>();
+  const params = useParams<{ id?: string; quizId?: string }>();
   const router = useRouter();
-  const quizId = String(params?.id ?? "");
+  const { workspacePath } = useTeacherWorkspacePath();
+  const quizId = String(params?.quizId ?? params?.id ?? "");
 
   const [quiz, setQuiz] = useState<QuizDetail | null>(null);
   const [questions, setQuestions] = useState<BuilderQuestion[]>([]);
@@ -238,7 +240,7 @@ export default function TeacherQuizBuilderPage() {
         <div>
           <button
             type="button"
-            onClick={() => router.push("/teacher/quiz-center")}
+            onClick={() => router.push(workspacePath("quiz-center"))}
             className="mb-3 inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
           >
             <ArrowLeft className="h-4 w-4" />

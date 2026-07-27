@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   BookOpen,
   BrainCircuit,
+  Bot,
   FileText,
   ScrollText,
   GraduationCap,
@@ -15,10 +16,11 @@ import {
   X,
 } from "lucide-react";
 
-const menuItems = [
+export const teacherMenuItems = [
   { href: "/teacher/dashboard", label: "Dashboard", icon: LayoutDashboard, color: "text-blue-500" },
   { href: "/teacher/classes", label: "Classes", icon: BookOpen, color: "text-green-500" },
   { href: "/teacher/quiz-center", label: "Quiz Center", icon: BrainCircuit, color: "text-orange-500" },
+  { href: "/teacher/assistant", label: "AI Teacher Assistant", icon: Bot, color: "text-cyan-500" },
   { href: "/teacher/exam-hall", label: "Exam Schedule", icon: FileText, color: "text-red-500" },
   { href: "/teacher/assignment", label: "Assignment", icon: ScrollText, color: "text-pink-500" },
   { href: "/teacher/grade-portal", label: "Grade Portal", icon: GraduationCap, color: "text-amber-500" },
@@ -30,13 +32,26 @@ const menuItems = [
 type TeacherSidebarProps = {
   open: boolean;
   onClose: () => void;
+  basePath?: string;
+  takeover?: boolean;
 };
 
 export default function TeacherSidebar({
   open,
   onClose,
+  basePath = "/teacher",
+  takeover = false,
 }: TeacherSidebarProps) {
   const pathname = usePathname();
+  const takeoverLabels = new Set([
+    "Classes",
+    "Quiz Center",
+    "Assignment",
+    "Attendance",
+  ]);
+  const items = takeover
+    ? teacherMenuItems.filter((item) => takeoverLabels.has(item.label))
+    : teacherMenuItems;
 
   return (
     <>
@@ -56,7 +71,7 @@ export default function TeacherSidebar({
         <div className="w-full space-y-1 p-4">
           <div className="flex items-center justify-between px-4 py-2">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Teacher Menu
+              {takeover ? "Takeover Teacher Menu" : "Teacher Menu"}
             </p>
             <button
               type="button"
@@ -68,15 +83,19 @@ export default function TeacherSidebar({
             </button>
           </div>
 
-          {menuItems.map((item) => {
+          {items.map((item) => {
             const Icon = item.icon;
+            const href =
+              takeover && item.label === "Dashboard"
+                ? basePath
+                : `${basePath}${item.href.replace("/teacher", "")}`;
             const active =
-              pathname === item.href || pathname.startsWith(`${item.href}/`);
+              pathname === href || pathname.startsWith(`${href}/`);
 
             return (
               <Link
-                key={item.href}
-                href={item.href}
+                key={href}
+                href={href}
                 onClick={onClose}
                 aria-current={active ? "page" : undefined}
                 className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${

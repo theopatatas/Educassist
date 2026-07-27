@@ -293,6 +293,12 @@ export async function applySchemaPatches() {
   }
 }
 
+async function backfillParentStudentLinks() {
+  await sequelize.query(
+    "INSERT IGNORE INTO `parent_students` (`parent_id`, `student_id`, `created_at`, `updated_at`) SELECT `id`, `student_id`, NOW(), NOW() FROM `parents` WHERE `student_id` IS NOT NULL;",
+  );
+}
+
 export async function seedReferenceData() {
   for (const subject of DEFAULT_SUBJECTS) {
     const existing = await Subject.findOne({ where: { name: subject.name } });
@@ -337,6 +343,7 @@ export async function initializeDatabase(options?: { force?: boolean }) {
   // Avoid repeated ALTER operations that can duplicate indexes in MySQL.
   await sequelize.sync({ force: options?.force ?? false });
   await applySchemaPatches();
+  await backfillParentStudentLinks();
   await seedReferenceData();
   await seedAdminUser();
 }

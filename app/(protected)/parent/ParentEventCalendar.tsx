@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Clock, MapPin, X } from "lucide-react";
 import { api } from "@/src/lib/http/client";
 import { AdminPanel } from "../admin/_components/AdminInsightsUI";
+import { useParentStudent } from "./ParentStudentContext";
 
 type ParentEvent = {
   id: number;
@@ -61,6 +62,7 @@ function eventIncludesDate(event: ParentEvent, day: string) {
 }
 
 export default function ParentEventCalendar() {
+  const { selectedStudentId, loading: studentsLoading } = useParentStudent();
   const [month, setMonth] = useState(() => new Date());
   const [events, setEvents] = useState<ParentEvent[]>([]);
   const [selectedEvents, setSelectedEvents] = useState<ParentEvent[]>([]);
@@ -69,9 +71,10 @@ export default function ParentEventCalendar() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (!selectedStudentId || studentsLoading) return;
     let active = true;
     api
-      .get("/api/events")
+      .get("/api/events", { params: { studentId: selectedStudentId } })
       .then(({ data }) => {
         if (!active) return;
         setEvents(Array.isArray(data?.events) ? data.events : []);
@@ -85,7 +88,7 @@ export default function ParentEventCalendar() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [selectedStudentId, studentsLoading]);
 
   const monthLabel = month.toLocaleDateString("en-US", {
     month: "long",

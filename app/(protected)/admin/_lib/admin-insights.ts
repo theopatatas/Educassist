@@ -25,12 +25,15 @@ export type AdminTeacher = {
 };
 
 export type AdminActivity = {
-  id: number;
+  id: string;
+  title: string;
+  description: string;
   user: string;
   role: string;
-  action: string;
+  module: string;
   occurredAt: string;
   category: string;
+  href?: string | null;
 };
 
 export type AdminCalendarEvent = {
@@ -53,6 +56,7 @@ export type AdminCalendarEvent = {
 export type AdminPendingTask = {
   id: string;
   label: string;
+  description: string;
   count: number;
   status: "critical" | "warning" | "info";
   href: string;
@@ -60,21 +64,45 @@ export type AdminPendingTask = {
 
 export type AnalyticsFilters = {
   schoolYear: string;
-  semester: string;
   quarter: string;
   gradeLevel: string;
   section: string;
+  subject: string;
+  teacher: string;
+  student: string;
   dateFrom: string;
   dateTo: string;
 };
 
 export type AdminAnalytics = {
   updatedAt?: string | null;
-  kpis?: { enrollmentGrowth?: number | null } | null;
+  kpis?: {
+    totalStudents: number;
+    totalTeachers: number;
+    totalSubjects: number;
+    totalSections: number;
+    enrollmentGrowth?: number | null;
+    averageAttendance: number;
+    averagePerformance: number | null;
+    passingRate: number | null;
+  } | null;
+  academic?: {
+    currentSchoolYear?: string;
+    currentQuarter?: string;
+    gradeEncodingStatus?: string;
+    gradePublishingStatus?: string;
+  };
+  filterOptions?: {
+    schoolYears: string[];
+    gradeLevels: string[];
+    sections: Array<{ id: number; name: string }>;
+    subjects: Array<{ id: number; name: string }>;
+    teachers: Array<{ id: number; name: string }>;
+    students: Array<{ id: number; name: string }>;
+  };
   enrollmentTrend: Array<{ label: string; value: number }>;
   enrollmentStatus: {
     newStudents: number;
-    transferred: number;
     graduated: number;
     inactive: number;
   } | null;
@@ -83,9 +111,16 @@ export type AdminAnalytics = {
     passingRate: number;
     honorStudents: number;
     atRisk: number;
-    highestGradeLevel: string;
-    lowestGradeLevel: string;
+    highestGradeLevel: string | null;
+    lowestGradeLevel: string | null;
+    gradeDistribution?: {
+      outstanding: number;
+      proficient: number;
+      passing: number;
+      failing: number;
+    };
   } | null;
+  performanceTrend?: Array<{ label: string; value: number }>;
   attendance: {
     present: number;
     late: number;
@@ -121,6 +156,59 @@ export type AdminAnalytics = {
     attendanceRate: number | null;
     passingRate: number | null;
   }>;
+  teacherWorkload?: Array<{
+    id: number;
+    name: string;
+    subjects: number;
+    sections: number;
+    students: number;
+    averageGrade?: number | null;
+  }>;
+  teacherWorkloadSummary?: {
+    highest: number;
+    lowest: number;
+    average: number;
+  } | null;
+  assignments?: {
+    total: number;
+    submitted: number;
+    expected: number;
+    completionRate: number | null;
+  };
+  quizzes?: {
+    total: number;
+    attempts: number;
+    completedAttempts: number;
+    averageScore: number | null;
+  };
+  aiUsage?: {
+    conversations: number;
+    teacherConversations: number;
+    lessonPlans: number;
+    finalizedLessonPlans: number;
+  };
+  parents?: {
+    total: number;
+    linkedStudents: number;
+    coverageRate: number | null;
+    loggedIn: number;
+  };
+  leaves?: {
+    total: number;
+    pending: number;
+    approved: number;
+    active: number;
+    completed: number;
+    rejected: number;
+  };
+  takeovers?: {
+    total: number;
+    active: number;
+    completed: number;
+    cancelled: number;
+  };
+  registrationTrend?: Array<{ label: string; value: number }>;
+  activityTrend?: Array<{ label: string; value: number }>;
   insights?: Array<{ id: string; label: string; value: string | number }>;
   dataQuality?: Array<{ id: string; label: string; count: number }>;
   exports?: { pdf: boolean; excel: boolean; csv: boolean } | null;
@@ -154,8 +242,6 @@ export async function getDashboardCore() {
   };
 }
 
-// These typed clients are ready for the corresponding backend services. Until
-// those services exist, callers present an explicit unavailable/empty state.
 export async function getAdminActivities() {
   const { data } = await api.get("/api/admin/activities");
   return Array.isArray(data?.activities)

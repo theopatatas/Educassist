@@ -11,6 +11,7 @@ import { Section } from "../../db/models/Section.model";
 import { SchoolEvent } from "../../db/models/SchoolEvent.model";
 import { Op, fn, col } from "sequelize";
 import { EventNotificationRead } from "../../db/models/EventNotificationRead.model";
+import { getParentSelectedStudentByUserId } from "../parent/parent.service";
 
 const categories = new Set([
   "Meeting",
@@ -73,9 +74,28 @@ function validate(
   return null;
 }
 export async function list(req: Request, res: Response) {
+  const role = String(req.user?.role ?? "");
+  let audienceContext:
+    | {
+        gradeLevel?: string | null;
+        sectionId?: number | null;
+        sectionName?: string | null;
+      }
+    | undefined;
+  if (role === "parent" && req.user?.sub) {
+    const selected = await getParentSelectedStudentByUserId(
+      String(req.user.sub),
+      typeof req.query.studentId === "string" ? req.query.studentId : undefined,
+    );
+    if (selected && "forbidden" in selected)
+      return res
+        .status(403)
+        .json({ ok: false, message: "Student is not linked to this parent" });
+    audienceContext = selected?.student ?? undefined;
+  }
   return res.json({
     ok: true,
-    events: await listEvents(req.query, String(req.user?.role ?? "")),
+    events: await listEvents(req.query, role, audienceContext),
   });
 }
 export async function create(req: Request, res: Response) {
@@ -262,7 +282,26 @@ function gradeEncodingNotificationTitle(
 
 export async function notifications(req: Request, res: Response) {
   const userId = currentUserId(req);
-  const events = (await listEvents({}, String(req.user?.role ?? "")))
+  const role = String(req.user?.role ?? "");
+  let audienceContext:
+    | {
+        gradeLevel?: string | null;
+        sectionId?: number | null;
+        sectionName?: string | null;
+      }
+    | undefined;
+  if (role === "parent" && req.user?.sub) {
+    const selected = await getParentSelectedStudentByUserId(
+      String(req.user.sub),
+      typeof req.query.studentId === "string" ? req.query.studentId : undefined,
+    );
+    if (selected && "forbidden" in selected)
+      return res
+        .status(403)
+        .json({ ok: false, message: "Student is not linked to this parent" });
+    audienceContext = selected?.student ?? undefined;
+  }
+  const events = (await listEvents({}, role, audienceContext))
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
     .slice(0, 30);
   const eventIds = events.map((event) => Number(event.id));

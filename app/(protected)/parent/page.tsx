@@ -4,7 +4,18 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "@/src/lib/http/client";
 import AcademicDashboardBadges from "../AcademicDashboardBadges";
 import ParentEventCalendar from "./ParentEventCalendar";
-import { CalendarCheck2, ClipboardList, FileCheck2, GraduationCap, NotebookText, UserRound } from "lucide-react";
+import {
+  CalendarCheck2,
+  ClipboardList,
+  FileCheck2,
+  GraduationCap,
+  Moon,
+  NotebookText,
+  Sun,
+  Sunset,
+  UserRound,
+} from "lucide-react";
+import { useParentStudent } from "./ParentStudentContext";
 
 type ParentOverview = {
   linkedStudent: {
@@ -66,8 +77,26 @@ const emptyOverview: ParentOverview = {
   ],
 };
 
+function getTimeGreeting(hour: number) {
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
 export default function ParentHome() {
+  const {
+    selectedStudent,
+    selectedStudentId,
+    loading: studentsLoading,
+    error: studentsError,
+  } = useParentStudent();
   const [overview, setOverview] = useState<ParentOverview>(emptyOverview);
+  const [parentName, setParentName] = useState("Parent");
+  const [dashboardNow] = useState(() => Date.now());
+  const currentHour = new Date(dashboardNow).getHours();
+  const greeting = getTimeGreeting(currentHour);
+  const GreetingIcon =
+    currentHour < 12 ? Sun : currentHour < 18 ? Sunset : Moon;
   const [isLoading, setIsLoading] = useState(true);
   const [academicSessions, setAcademicSessions] = useState<AcademicSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<AcademicSession | null>(null);
@@ -78,7 +107,39 @@ export default function ParentHome() {
   useEffect(() => {
     let active = true;
     api
-      .get("/api/parents/overview")
+      .get("/api/parents/me")
+      .then(({ data }) => {
+        if (!active) return;
+        const name = [
+          String(data?.parent?.firstName ?? "").trim(),
+          String(data?.parent?.lastName ?? "").trim(),
+        ]
+          .filter(Boolean)
+          .join(" ");
+        setParentName(name || "Parent");
+      })
+      .catch(() => {
+        if (active) setParentName("Parent");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedStudentId) {
+      if (!studentsLoading) {
+        setOverview(emptyOverview);
+        setIsLoading(false);
+      }
+      return;
+    }
+    let active = true;
+    setIsLoading(true);
+    api
+      .get("/api/parents/overview", {
+        params: { studentId: selectedStudentId },
+      })
       .then(({ data }) => {
         if (!active) return;
         const next = data?.overview as ParentOverview | undefined;
@@ -94,13 +155,28 @@ export default function ParentHome() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [selectedStudentId, studentsLoading]);
 
   useEffect(() => {
+    if (!selectedStudentId) {
+      if (!studentsLoading) {
+        setAcademicSessions([]);
+        setSelectedSession(null);
+        setAcademicRecords([]);
+        setAcademicLoading(false);
+      }
+      return;
+    }
     let active = true;
+    setAcademicLoading(true);
+    setAcademicError("");
     Promise.all([
-      api.get("/api/parents/academic-sessions"),
-      api.get("/api/parents/academic-record"),
+      api.get("/api/parents/academic-sessions", {
+        params: { studentId: selectedStudentId },
+      }),
+      api.get("/api/parents/academic-record", {
+        params: { studentId: selectedStudentId },
+      }),
     ])
       .then(([sessionsResponse, recordResponse]) => {
         if (!active) return;
@@ -129,7 +205,7 @@ export default function ParentHome() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [selectedStudentId, studentsLoading]);
 
   const loadAcademicSession = async (session: AcademicSession) => {
     if (academicLoading) return;
@@ -138,6 +214,7 @@ export default function ParentHome() {
     try {
       const { data } = await api.get("/api/parents/academic-record", {
         params: {
+          studentId: selectedStudentId,
           academicYear: session.academicYear,
           gradeLevel: session.gradeLevel,
         },
@@ -154,76 +231,121 @@ export default function ParentHome() {
   };
 
   const linkedStudentText = useMemo(() => {
-    if (!overview.linkedStudent) return "No linked student";
-    const grade = overview.linkedStudent.gradeLevel ? ` • ${overview.linkedStudent.gradeLevel}` : "";
-    const section = overview.linkedStudent.sectionId ? ` • Section ${overview.linkedStudent.sectionId}` : "";
-    return `${overview.linkedStudent.name}${grade}${section}`;
-  }, [overview.linkedStudent]);
+    if (!selectedStudent) return "No linked student";
+    const grade = selectedStudent.gradeLevel
+      ? ` • ${selectedStudent.gradeLevel}`
+      : "";
+    const section = selectedStudent.sectionName
+      ? ` • ${selectedStudent.sectionName}`
+      : "";
+    return `${selectedStudent.name}${grade}${section}`;
+  }, [selectedStudent]);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Parent Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-600">Overview of your linked student progress.</p>
-        <div className="mt-4">
-          <AcademicDashboardBadges />
+    <div className="mx-auto max-w-7xl space-y-5 sm:space-y-8">
+      <section className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-slate-500">
+            Welcome back, Parent
+          </p>
+          <h1
+            suppressHydrationWarning
+            className="mt-1 break-words text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl"
+          >
+            {greeting}, {parentName}
+          </h1>
+          <p className="mt-2 text-sm text-slate-600 sm:text-base">
+            Here is your selected student&apos;s learning overview for today.
+          </p>
+          <div className="mt-4">
+            <AcademicDashboardBadges />
+          </div>
+        </div>
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-amber-100 bg-amber-50 text-amber-600 shadow-sm sm:h-14 sm:w-14">
+          <GreetingIcon className="h-7 w-7" />
+        </div>
+      </section>
+
+      <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-md sm:p-6">
+        <div className="rounded-xl bg-violet-50 p-3">
+          <UserRound className="h-6 w-6 text-violet-600" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm text-slate-500">Currently Viewing</p>
+          <p className="mt-1 break-words text-base font-bold text-slate-900 sm:text-lg">
+            {linkedStudentText}
+          </p>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Linked Student</p>
-        <div className="mt-2 flex items-center gap-2">
-          <UserRound className="h-5 w-5 text-slate-500" />
-          <p className="text-base font-semibold text-slate-900">{linkedStudentText}</p>
+      {studentsError ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+          {studentsError}
         </div>
-      </div>
+      ) : null}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Attendance Rate</p>
-          <p className="mt-2 flex items-center gap-2 text-2xl font-bold text-slate-900">
-            <CalendarCheck2 className="h-5 w-5 text-emerald-600" />
-            {overview.attendance.rate}%
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Quiz Submitted</p>
-          <p className="mt-2 flex items-center gap-2 text-2xl font-bold text-slate-900">
-            <ClipboardList className="h-5 w-5 text-blue-600" />
-            {overview.quizzes.submitted}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Quiz Average</p>
-          <p className="mt-2 flex items-center gap-2 text-2xl font-bold text-slate-900">
-            <NotebookText className="h-5 w-5 text-indigo-600" />
-            {overview.quizzes.averageScore}%
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Upcoming Exams</p>
-          <p className="mt-2 flex items-center gap-2 text-2xl font-bold text-slate-900">
-            <FileCheck2 className="h-5 w-5 text-amber-600" />
-            {overview.exams.upcoming}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Grade Average</p>
-          <p className="mt-2 flex items-center gap-2 text-2xl font-bold text-slate-900">
-            <GraduationCap className="h-5 w-5 text-violet-600" />
-            {overview.grades.average}%
-          </p>
-        </div>
+      <div className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {[
+          {
+            label: "Attendance Rate",
+            value: `${overview.attendance.rate}%`,
+            icon: CalendarCheck2,
+            bg: "bg-emerald-50",
+            color: "text-emerald-600",
+          },
+          {
+            label: "Quiz Submitted",
+            value: overview.quizzes.submitted,
+            icon: ClipboardList,
+            bg: "bg-blue-50",
+            color: "text-blue-600",
+          },
+          {
+            label: "Quiz Average",
+            value: `${overview.quizzes.averageScore}%`,
+            icon: NotebookText,
+            bg: "bg-indigo-50",
+            color: "text-indigo-600",
+          },
+          {
+            label: "Upcoming Exams",
+            value: overview.exams.upcoming,
+            icon: FileCheck2,
+            bg: "bg-amber-50",
+            color: "text-amber-600",
+          },
+          {
+            label: "Grade Average",
+            value: `${overview.grades.average}%`,
+            icon: GraduationCap,
+            bg: "bg-violet-50",
+            color: "text-violet-600",
+          },
+        ].map((stat) => {
+          const Icon = stat.icon;
+          return (
+            <div
+              key={stat.label}
+              className="flex w-full items-center gap-4 rounded-2xl bg-white p-5 shadow-md transition hover:-translate-y-0.5 hover:shadow-lg sm:p-6"
+            >
+              <div className={`rounded-xl p-3 ${stat.bg}`}>
+                <Icon className={`h-6 w-6 ${stat.color}`} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm text-slate-500">{stat.label}</p>
+                <p className="mt-0.5 text-2xl font-bold text-slate-800">
+                  {stat.value}
+                </p>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Attendance</h2>
-          <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+          <div className="mt-4 grid grid-cols-1 gap-3 text-center min-[380px]:grid-cols-3">
             <div className="rounded-xl border border-green-100 bg-green-50 p-3">
               <p className="text-xs font-semibold uppercase text-green-700">Present</p>
               <p className="mt-1 text-xl font-bold text-green-900">{overview.attendance.present}</p>
@@ -267,7 +389,18 @@ export default function ParentHome() {
         </div>
       </div>
 
-      <ParentEventCalendar />
+      {selectedStudentId ? (
+        <ParentEventCalendar key={selectedStudentId} />
+      ) : !studentsLoading ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+          <p className="font-semibold text-slate-700">
+            No linked student selected
+          </p>
+          <p className="mt-1 text-sm text-slate-500">
+            Link a student to view their calendar events.
+          </p>
+        </section>
+      ) : null}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -280,7 +413,7 @@ export default function ParentHome() {
               grades.
             </p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end">
             <label className="min-w-0 text-sm font-medium text-slate-700 sm:min-w-80">
               Academic Session
               <select
@@ -340,7 +473,7 @@ export default function ParentHome() {
           </p>
         ) : null}
 
-        <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+        <div className="mt-4 max-w-full overflow-x-auto rounded-xl border border-slate-200 overscroll-x-contain">
           {academicLoading ? (
             <p className="p-6 text-center text-sm text-slate-500">
               Loading academic records…
@@ -357,8 +490,13 @@ export default function ParentHome() {
                     "Quarter 3",
                     "Quarter 4",
                     "Final Grade",
-                  ].map((heading) => (
-                    <th key={heading} className="px-4 py-3 font-semibold">
+                  ].map((heading, index) => (
+                    <th
+                      key={heading}
+                      className={`px-4 py-3 font-semibold ${
+                        index === 0 ? "sticky left-0 bg-slate-50" : ""
+                      }`}
+                    >
                       {heading}
                     </th>
                   ))}
@@ -367,7 +505,7 @@ export default function ParentHome() {
               <tbody className="divide-y divide-slate-100">
                 {academicRecords.map((record) => (
                   <tr key={record.subjectId} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-900">
+                    <td className="sticky left-0 bg-white px-4 py-3 font-medium text-slate-900">
                       {record.subjectName}
                     </td>
                     <td className="px-4 py-3 text-slate-500">
@@ -399,11 +537,13 @@ export default function ParentHome() {
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Student Grades</h2>
         <p className="mt-1 text-sm text-slate-500">Published grades by quarter</p>
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4 max-w-full overflow-x-auto overscroll-x-contain rounded-xl">
           <table className="w-full min-w-[900px] text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                <th className="px-3 py-2">Quarter</th>
+                <th className="sticky left-0 bg-slate-50 px-3 py-2">
+                  Quarter
+                </th>
                 <th className="px-3 py-2">Math</th>
                 <th className="px-3 py-2">Science</th>
                 <th className="px-3 py-2">English</th>
@@ -420,7 +560,7 @@ export default function ParentHome() {
                 const avg = Math.round((row.math + row.science + row.english + row.filipino + row.mapeh + row.ap + row.tle + row.values) / 8);
                 return (
                   <tr key={row.quarter} className="hover:bg-slate-50">
-                    <td className="px-3 py-2 font-semibold text-slate-900">{row.quarter}</td>
+                    <td className="sticky left-0 bg-white px-3 py-2 font-semibold text-slate-900">{row.quarter}</td>
                     <td className="px-3 py-2 text-slate-700">{row.math}</td>
                     <td className="px-3 py-2 text-slate-700">{row.science}</td>
                     <td className="px-3 py-2 text-slate-700">{row.english}</td>

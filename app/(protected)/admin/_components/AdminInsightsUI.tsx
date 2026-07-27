@@ -34,7 +34,7 @@ export function AdminMetricCard({ label, value, description, icon: Icon, href, l
 export function InsightState({ loading, error, emptyLabel = "No data is available yet." }: { loading?: boolean; error?: boolean; emptyLabel?: string }) {
   return <div className="flex min-h-32 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 px-4 text-center">
     {loading ? <LoaderCircle className="mb-2 h-5 w-5 animate-spin text-slate-400" /> : <Database className="mb-2 h-5 w-5 text-slate-400" />}
-    <p className="text-sm font-medium text-slate-600">{loading ? "Loading data…" : error ? "Data service is not available yet." : emptyLabel}</p>
-    {!loading && error ? <p className="mt-1 max-w-sm text-xs text-slate-400">This component is connected and will populate when its backend endpoint is available.</p> : null}
+    <p className="text-sm font-medium text-slate-600">{loading ? "Loading data…" : error ? "Unable to load data." : emptyLabel}</p>
+    {!loading && error ? <p className="mt-1 max-w-sm text-xs text-slate-400">Check your connection and try loading this section again.</p> : null}
   </div>;
 }

@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
+  Activity,
+  AlertTriangle,
   BarChart3,
   BookOpenText,
   CalendarDays,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   FileText,
@@ -754,18 +757,37 @@ export default function AdminDashboard() {
           {activitiesUnavailable ? (
             <InsightState error />
           ) : activities.length ? (
-            <div className="space-y-2">
-              {activities.slice(0, 6).map((activity) => (
+            <div className="max-h-[440px] space-y-2 overflow-y-auto pr-1">
+              {activities.map((activity) => (
                 <div
                   key={activity.id}
-                  className="rounded-xl border border-slate-100 p-3 text-sm"
+                  className="flex gap-3 rounded-xl border border-slate-100 p-3 text-sm transition hover:border-slate-200 hover:bg-slate-50"
                 >
-                  <b>{activity.user}</b>
-                  <span className="text-slate-500"> {activity.action}</span>
-                  <p className="mt-1 text-xs text-slate-400">
-                    {activity.role} ·{" "}
-                    {new Date(activity.occurredAt).toLocaleString()}
-                  </p>
+                  <span className="mt-0.5 rounded-xl bg-blue-50 p-2 text-blue-600">
+                    <Activity className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    {activity.href ? (
+                      <Link
+                        href={activity.href}
+                        className="font-semibold text-slate-900 hover:text-blue-600"
+                      >
+                        {activity.title}
+                      </Link>
+                    ) : (
+                      <p className="font-semibold text-slate-900">
+                        {activity.title}
+                      </p>
+                    )}
+                    <p className="mt-1 text-sm leading-5 text-slate-600">
+                      {activity.description}
+                    </p>
+                    <p className="mt-2 text-xs text-slate-400">
+                      Performed by {activity.user} · {activity.role} ·{" "}
+                      {activity.module} ·{" "}
+                      {new Date(activity.occurredAt).toLocaleString()}
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>
@@ -780,20 +802,33 @@ export default function AdminDashboard() {
           {tasksUnavailable ? (
             <InsightState error />
           ) : tasks.length ? (
-            <div className="space-y-2">
+            <div className="max-h-[440px] space-y-2 overflow-y-auto pr-1">
               {tasks.map((task) => (
                 <Link
                   key={task.id}
                   href={task.href}
-                  className="flex items-center justify-between rounded-xl border border-slate-100 p-3 hover:bg-slate-50"
+                  className="group flex items-center gap-3 rounded-xl border border-slate-100 p-3 transition hover:border-slate-200 hover:bg-slate-50"
                 >
-                  <span className="flex items-center gap-2 text-sm">
-                    <i
-                      className={`h-2 w-2 rounded-full ${task.status === "critical" ? "bg-rose-500" : task.status === "warning" ? "bg-amber-500" : "bg-blue-500"}`}
-                    />
-                    {task.label}
+                  <span
+                    className={`rounded-xl p-2 ${task.status === "critical" ? "bg-rose-50 text-rose-600" : task.status === "warning" ? "bg-amber-50 text-amber-600" : "bg-blue-50 text-blue-600"}`}
+                  >
+                    {task.status === "critical" ? (
+                      <AlertTriangle className="h-4 w-4" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4" />
+                    )}
                   </span>
-                  <b>{task.count}</b>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-slate-800 group-hover:text-blue-600">
+                      {task.label}
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-5 text-slate-500">
+                      {task.description}
+                    </span>
+                  </span>
+                  <b className="rounded-full bg-slate-100 px-2.5 py-1 text-sm text-slate-700">
+                    {task.count}
+                  </b>
                 </Link>
               ))}
             </div>
