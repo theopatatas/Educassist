@@ -756,7 +756,7 @@ export default function TeacherExamHallPage() {
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Exam Title</label>
-                <input type="text" value={newExam.title} onChange={(e) => setNewExam({ ...newExam, title: e.target.value })} className="w-full rounded-xl border border-gray-200 px-4 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-indigo-500" placeholder="e.g. First Quarter Exam" required />
+                <input type="text" value={newExam.title} onChange={(e) => setNewExam({ ...newExam, title: e.target.value })} className="w-full rounded-xl border border-gray-200 px-4 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-indigo-500" placeholder="e.g. First Term Exam" required />
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

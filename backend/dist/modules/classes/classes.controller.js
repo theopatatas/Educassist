@@ -43,6 +43,13 @@ async function createMyClass(req, res) {
     const cls = await (0, classes_service_1.createClassForTeacher)(userId, req.body ?? {});
     if (!cls)
         return res.status(404).json({ ok: false, message: "Teacher profile not found" });
+    if ("error" in cls)
+        return res.status(cls.status).json({
+            ok: false,
+            code: cls.error,
+            message: cls.message,
+            conflict: cls.conflict,
+        });
     return res.status(201).json({ ok: true, class: cls });
 }
 async function updateMyClass(req, res) {
@@ -54,6 +61,13 @@ async function updateMyClass(req, res) {
         return res.status(404).json({ ok: false, message: "Teacher profile not found" });
     if (result === false)
         return res.status(404).json({ ok: false, message: "Class not found" });
+    if ("error" in result)
+        return res.status(result.status).json({
+            ok: false,
+            code: result.error,
+            message: result.message,
+            conflict: result.conflict,
+        });
     return res.json({ ok: true, class: result });
 }
 async function deleteMyClass(req, res) {

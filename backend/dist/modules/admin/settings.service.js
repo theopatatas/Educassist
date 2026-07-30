@@ -20,6 +20,7 @@ const SchoolEvent_model_1 = require("../../db/models/SchoolEvent.model");
 const SystemAuditLog_model_1 = require("../../db/models/SystemAuditLog.model");
 const SystemNotification_model_1 = require("../../db/models/SystemNotification.model");
 const User_model_1 = require("../../db/models/User.model");
+const academic_terms_1 = require("../../utils/academic-terms");
 exports.editableSections = [
     "general",
     "academic",
@@ -31,13 +32,7 @@ exports.editableSections = [
 async function findSettings() {
     return PlatformSetting_model_1.PlatformSetting.findByPk(1);
 }
-const QUARTERS = new Set([
-    "Quarter 1",
-    "Quarter 2",
-    "Quarter 3",
-    "Quarter 4",
-    "End of School Year",
-]);
+const TERMS = new Set([...academic_terms_1.ACADEMIC_TERMS, "End of School Year"]);
 function text(value) {
     return String(value ?? "").trim();
 }
@@ -77,36 +72,28 @@ function addCalendarDays(value, days) {
     date.setUTCDate(date.getUTCDate() + days);
     return date.toISOString().slice(0, 10);
 }
-function previousQuarter(quarter) {
-    if (quarter === "Quarter 2")
-        return "Quarter 1";
-    if (quarter === "Quarter 3")
-        return "Quarter 2";
-    if (quarter === "Quarter 4")
-        return "Quarter 3";
-    if (quarter === "End of School Year")
-        return "Quarter 4";
-    return "";
+function currentTermValue(academic) {
+    return (0, academic_terms_1.normalizeActiveAcademicTerm)(academic.currentTerm ?? academic["currentQuarter"]);
 }
-function encodingQuarter(academic) {
+function encodingTerm(academic) {
     return Boolean(academic.endOfSchoolYear)
-        ? "Quarter 4"
-        : previousQuarter(text(academic.currentQuarter));
+        ? "Term 3"
+        : currentTermValue(academic);
 }
 function serializeAcademic(row, academic = settingsRecord(row?.academic)) {
     const general = settingsRecord(row?.general);
     const currentSchoolYear = text(academic.currentSchoolYear) || text(general.currentAcademicYear);
-    const currentQuarter = text(academic.currentQuarter) || (currentSchoolYear ? "Quarter 1" : "");
+    const currentTerm = currentTermValue(academic) || (currentSchoolYear ? "Term 1" : "");
     const deadline = text(academic.gradeEncodingDeadline);
     const configuredStatus = text(academic.gradeEncodingStatus).toUpperCase();
-    const available = Boolean(currentSchoolYear) && QUARTERS.has(currentQuarter);
+    const available = Boolean(currentSchoolYear) && TERMS.has(currentTerm);
     const expired = Boolean(deadline) && deadline < manilaDate();
     const open = available && configuredStatus === "OPEN" && !expired;
     return {
         currentSchoolYear,
         currentSemester: text(academic.currentSemester),
-        currentQuarter,
-        gradeEncodingQuarter: encodingQuarter(academic),
+        currentTerm,
+        gradeEncodingTerm: encodingTerm(academic),
         endOfSchoolYear: Boolean(academic.endOfSchoolYear),
         passingGrade: Number.isFinite(Number(academic.passingGrade))
             ? Number(academic.passingGrade)
@@ -137,9 +124,9 @@ async function getAcademicContext() {
 }
 async function syncDeadlineEvent(academic, userId) {
     const deadline = text(academic.gradeEncodingDeadline);
-    const quarter = text(academic.currentQuarter);
+    const term = currentTermValue(academic);
     const eventId = Number(academic.gradeEncodingEventId);
-    if (!deadline || !QUARTERS.has(quarter)) {
+    if (!deadline || !TERMS.has(term)) {
         if (eventId)
             await SchoolEvent_model_1.SchoolEvent.destroy({ where: { id: eventId } });
         const withoutEvent = { ...academic };
@@ -147,9 +134,9 @@ async function syncDeadlineEvent(academic, userId) {
         return withoutEvent;
     }
     const payload = {
-        title: `${quarter} Grade Encoding Deadline`,
+        title: `${term} Grade Encoding Deadline`,
         category: "Grade Encoding Deadline",
-        description: `Grade encoding deadline for ${text(academic.currentSchoolYear)}. Encoding quarter: ${encodingQuarter(academic)}.`,
+        description: `Grade encoding deadline for ${text(academic.currentSchoolYear)}. Encoding term: ${encodingTerm(academic)}.`,
         eventDate: deadline,
         endDate: null,
         startTime: null,
@@ -173,20 +160,20 @@ async function notifyAcademicPeriod(academic, actorId) {
         },
         attributes: ["id", "role"],
     });
-    const quarter = text(academic.currentQuarter);
-    const openQuarter = encodingQuarter(academic);
+    const term = currentTermValue(academic);
+    const openTerm = encodingTerm(academic);
     const deadline = text(academic.gradeEncodingDeadline);
     const encodingOpen = text(academic.gradeEncodingStatus).toUpperCase() === "OPEN" &&
         Boolean(deadline) &&
-        Boolean(openQuarter);
+        Boolean(openTerm);
     await Promise.all(recipients.map((recipient) => SystemNotification_model_1.SystemNotification.create({
         userId: Number(recipient.id),
         title: encodingOpen
-            ? `${openQuarter} grade encoding is now open.`
+            ? `${openTerm} grade encoding is now open.`
             : `${text(academic.currentSchoolYear)} is now active`,
         message: encodingOpen
             ? `Grade encoding for ${text(academic.currentSchoolYear)} is open until ${deadline}.`
-            : `${quarter} is active. Grade encoding remains locked until the Super Admin opens it.`,
+            : `${term} is active. Grade encoding remains locked until the Super Admin opens it.`,
         category: "academic",
         href: String(recipient.role).toUpperCase() === "TEACHER"
             ? "/teacher/grade-portal"
@@ -199,25 +186,27 @@ async function saveAcademicSettings(value, context) {
         defaults: { id: 1 },
     });
     const previous = settingsRecord(row.academic);
-    const requestedEndOfSchoolYear = text(value.currentQuarter) === "End of School Year" ||
-        (text(value.currentQuarter) === "Quarter 4" &&
+    const requestedValue = value.currentTerm ?? value["currentQuarter"];
+    const requestedEndOfSchoolYear = text(requestedValue) === "End of School Year" ||
+        ((0, academic_terms_1.normalizeActiveAcademicTerm)(requestedValue) === "Term 3" &&
             Boolean(value.endOfSchoolYear));
-    const requestedQuarter = requestedEndOfSchoolYear
-        ? "Quarter 4"
-        : text(value.currentQuarter);
+    const requestedTerm = requestedEndOfSchoolYear
+        ? "Term 3"
+        : (0, academic_terms_1.normalizeActiveAcademicTerm)(requestedValue);
     const schoolYearChanged = text(value.currentSchoolYear) !== text(previous.currentSchoolYear);
-    const quarterChanged = requestedQuarter !== text(previous.currentQuarter) ||
+    const termChanged = requestedTerm !== currentTermValue(previous) ||
         requestedEndOfSchoolYear !== Boolean(previous.endOfSchoolYear);
     let next = {
         ...previous,
         ...value,
-        currentQuarter: requestedQuarter,
+        currentTerm: requestedTerm,
         endOfSchoolYear: requestedEndOfSchoolYear,
     };
+    delete next["currentQuarter"];
     if (schoolYearChanged) {
         next = {
             ...next,
-            currentQuarter: "Quarter 1",
+            currentTerm: "Term 1",
             endOfSchoolYear: false,
             gradeEncodingStartDate: "",
             gradeEncodingDeadline: "",
@@ -225,7 +214,7 @@ async function saveAcademicSettings(value, context) {
             gradePublishingStatus: "LOCKED",
         };
     }
-    else if (quarterChanged) {
+    else if (termChanged) {
         const start = manilaDate();
         next = {
             ...next,
@@ -259,8 +248,8 @@ async function saveAcademicSettings(value, context) {
         role: context.role,
         action: schoolYearChanged
             ? "ACADEMIC_YEAR_CHANGED"
-            : quarterChanged
-                ? "ACADEMIC_QUARTER_CHANGED"
+            : termChanged
+                ? "ACADEMIC_TERM_CHANGED"
                 : "ACADEMIC_SETTINGS_UPDATED",
         entityType: "platform_academic_settings",
         entityId: row.id,
@@ -270,7 +259,7 @@ async function saveAcademicSettings(value, context) {
         deviceInfo: context.deviceInfo ?? null,
         metadata: { previous, current: next },
     });
-    if (quarterChanged || schoolYearChanged)
+    if (termChanged || schoolYearChanged)
         await notifyAcademicPeriod(next, context.userId);
     return next;
 }
@@ -302,29 +291,21 @@ async function setGradeEncodingStatus(status, context, deadline) {
     });
     return next;
 }
-function gradingTerm(quarter) {
-    if (quarter === "Quarter 1")
-        return "1st Grading";
-    if (quarter === "Quarter 2")
-        return "2nd Grading";
-    if (quarter === "Quarter 3")
-        return "3rd Grading";
-    if (quarter === "Quarter 4")
-        return "4th Grading";
-    return "";
-}
 async function getGradeSubmissionProgress() {
     const academic = await getAcademicContext();
-    const term = gradingTerm(academic.gradeEncodingQuarter);
+    const term = (0, academic_terms_1.normalizeAcademicTerm)(academic.gradeEncodingTerm);
     if (!academic.currentSchoolYear || !term) {
         return { academic, totals: null, teachers: [], publishedItems: [] };
     }
+    const candidates = (0, academic_terms_1.gradeItemTermCandidates)(term);
     const [classes, items, teachers] = await Promise.all([
         Class_model_1.Class.findAll({ order: [["id", "ASC"]] }),
         GradeItem_model_1.GradeItem.findAll({
             where: {
                 academicYear: academic.currentSchoolYear,
-                name: { [sequelize_1.Op.like]: `${term}|%` },
+                [sequelize_1.Op.or]: candidates.map((candidate) => ({
+                    name: { [sequelize_1.Op.like]: `${candidate}|%` },
+                })),
             },
         }),
         Teacher_model_1.Teacher.findAll(),
@@ -453,9 +434,18 @@ async function clearLogo(updatedBy) {
     return previous;
 }
 function serializeSettings(row) {
+    const storedAcademic = row ? settingsRecord(row.academic) : null;
+    const academic = storedAcademic
+        ? {
+            ...storedAcademic,
+            currentTerm: currentTermValue(storedAcademic),
+        }
+        : null;
+    if (academic)
+        delete academic["currentQuarter"];
     return {
         general: row ? settingsRecord(row.general) : null,
-        academic: row ? settingsRecord(row.academic) : null,
+        academic,
         userManagement: row ? settingsRecord(row.userManagement) : null,
         security: row ? settingsRecord(row.security) : null,
         notifications: row ? settingsRecord(row.notifications) : null,

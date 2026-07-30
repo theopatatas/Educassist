@@ -22,12 +22,12 @@ function calculateQuizScore(earnedPoints, totalPoints, penaltyPoints = 0) {
 function calculateAttendancePercentage(present, total) {
     return calculatePercentage(present, total);
 }
-function calculateFinalSubjectAverage(quarterlyGrades) {
-    if (quarterlyGrades.length !== 4 ||
-        quarterlyGrades.some((grade) => grade === null || grade === undefined || !Number.isFinite(grade))) {
+function calculateFinalSubjectAverage(termGrades) {
+    if (termGrades.length !== 3 ||
+        termGrades.some((grade) => grade === null || grade === undefined || !Number.isFinite(grade))) {
         return null;
     }
-    return Math.round(quarterlyGrades.reduce((sum, grade) => sum + grade, 0) / 4);
+    return Math.round(termGrades.reduce((sum, grade) => sum + grade, 0) / 3);
 }
 function calculateOverallStudentAverage(finalSubjectAverages) {
     const grades = finalSubjectAverages.filter((grade) => grade !== null && grade !== undefined && Number.isFinite(grade));

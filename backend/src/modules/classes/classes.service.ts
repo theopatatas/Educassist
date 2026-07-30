@@ -1,5 +1,6 @@
-import { Op } from "sequelize";
+import { Op, Transaction, type Transaction as SequelizeTransaction } from "sequelize";
 import bcrypt from "bcryptjs";
+import { sequelize } from "../../config/db";
 import { Class } from "../../db/models/Class.model";
 import { Attendance } from "../../db/models/Attendance.model";
 import { Grade } from "../../db/models/Grade.model";
@@ -14,6 +15,15 @@ import {
   calculateFinalSubjectAverage,
   calculateOverallStudentAverage,
 } from "../../utils/calculations";
+import {
+  ACADEMIC_TERMS,
+  normalizeAcademicTerm,
+} from "../../utils/academic-terms";
+import {
+  overlappingDays,
+  parseClassSchedule,
+  weekdayLabel,
+} from "./schedule-conflict";
 
 export type CreateClassInput = {
   className?: string;
@@ -24,6 +34,22 @@ export type CreateClassInput = {
   buildingName?: string;
   meetingDay?: string | string[];
   meetingTime?: string;
+};
+
+export type ClassScheduleValidationError = {
+  error: "schedule_conflict" | "invalid_schedule" | "academic_year_unavailable";
+  status: 409 | 422;
+  message: string;
+  conflict?: {
+    classId: number;
+    className: string | null;
+    subjectName: string | null;
+    gradeLevel: string | null;
+    sectionName: string | null;
+    days: string[];
+    meetingTime: string;
+    academicYear: string;
+  };
 };
 
 type SaveAttendanceInput = {
@@ -106,18 +132,88 @@ function normalizeSubjectName(subject: string) {
   return SUBJECT_KEY_TO_NAME[key] ?? subject.trim();
 }
 
+async function scheduleValidation(
+  teacherId: number,
+  academicYear: string,
+  meetingDay: string | null,
+  meetingTime: string | null,
+  transaction: SequelizeTransaction,
+  excludeClassId?: number,
+): Promise<ClassScheduleValidationError | null> {
+  const hasScheduleInput = Boolean(meetingDay || meetingTime);
+  if (!hasScheduleInput) return null;
+  if (!academicYear) {
+    return {
+      error: "academic_year_unavailable",
+      status: 422,
+      message:
+        "A current academic year must be configured before creating a class schedule.",
+    };
+  }
+  const candidate = parseClassSchedule(meetingDay, meetingTime);
+  if (!candidate) {
+    return {
+      error: "invalid_schedule",
+      status: 422,
+      message:
+        "Select at least one valid day and provide a complete start and end time.",
+    };
+  }
+
+  const existingClasses = await Class.findAll({
+    where: {
+      teacherId,
+      ...(excludeClassId ? { id: { [Op.ne]: excludeClassId } } : {}),
+      [Op.or]: [{ academicYear }, { academicYear: null }],
+    },
+    transaction,
+    lock: transaction.LOCK.UPDATE,
+  });
+  for (const existing of existingClasses) {
+    const existingSchedule = parseClassSchedule(
+      existing.meetingDay,
+      existing.meetingTime,
+    );
+    if (!existingSchedule) continue;
+    const days = overlappingDays(candidate, existingSchedule);
+    if (!days.length) continue;
+    const [subject, section] = await Promise.all([
+      existing.subjectId
+        ? Subject.findByPk(existing.subjectId, { transaction })
+        : Promise.resolve(null),
+      existing.sectionId
+        ? Section.findByPk(existing.sectionId, { transaction })
+        : Promise.resolve(null),
+    ]);
+    const dayLabels = days.map(weekdayLabel);
+    const classLabel = [
+      subject?.name || existing.name || "Existing class",
+      [existing.gradeLevel, section?.name].filter(Boolean).join(" – "),
+    ]
+      .filter(Boolean)
+      .join(" • ");
+    return {
+      error: "schedule_conflict",
+      status: 409,
+      message: `Schedule conflict on ${dayLabels.join(", ")}: ${candidate.timeLabel} overlaps with ${classLabel} (${existingSchedule.timeLabel}) in Academic Year ${academicYear}.`,
+      conflict: {
+        classId: Number(existing.id),
+        className: existing.name,
+        subjectName: subject?.name ?? null,
+        gradeLevel: existing.gradeLevel,
+        sectionName: section?.name ?? null,
+        days: dayLabels,
+        meetingTime: existingSchedule.timeLabel,
+        academicYear,
+      },
+    };
+  }
+  return null;
+}
+
 function toSubjectKey(subject: string): SubjectKey | null {
   const key = normalizeText(subject);
   return SUBJECT_ALIAS_TO_KEY[key] ?? null;
-}
-
-function quarterFromTerm(term: string) {
-  const normalized = normalizeText(term);
-  if (normalized.startsWith("1")) return "Quarter 1";
-  if (normalized.startsWith("2")) return "Quarter 2";
-  if (normalized.startsWith("3")) return "Quarter 3";
-  if (normalized.startsWith("4")) return "Quarter 4";
-  return null;
 }
 
 function parseGradeItemName(name: string) {
@@ -240,37 +336,63 @@ export async function getClassFormOptionsForTeacher(userId: string) {
 export async function createClassForTeacher(userId: string, input: CreateClassInput) {
   const teacher = await Teacher.findOne({ where: { userId } });
   if (!teacher) return null;
-  let subjectId = input.subjectId ?? null;
-  if (!subjectId && input.subjectName?.trim()) {
-    const normalizedSubject = input.subjectName.trim();
-    const existingSubject = await Subject.findOne({ where: { name: normalizedSubject } });
-    const subject = existingSubject ?? (await Subject.create({ name: normalizedSubject, code: null }));
-    subjectId = subject.id as number;
-  }
-  let sectionId = input.sectionId ?? null;
-  if (!sectionId && input.className?.trim()) {
-    const sectionName = input.className.trim();
-    const [section] = await Section.findOrCreate({
-      where: { name: sectionName },
-      defaults: { name: sectionName },
-    });
-    sectionId = Number(section.id);
-  }
-  const resolvedClassName = (input.className ?? input.subjectName ?? null)?.toString().slice(0, 120) ?? null;
   const meetingDayValue = serializeMeetingDays(input.meetingDay);
   const meetingDay = meetingDayValue ? meetingDayValue.slice(0, 20) : null;
   const meetingTime = input.meetingTime?.toString().slice(0, 100) ?? null;
-  const cls = await Class.create({
-    teacherId: teacher.id,
-    name: resolvedClassName,
-    subjectId: subjectId ?? null,
-    sectionId,
-    gradeLevel: input.gradeLevel ?? null,
-    buildingName: input.buildingName?.trim() || null,
-    meetingDay,
-    meetingTime,
+  const academic = await getAcademicContext();
+  return sequelize.transaction({
+    isolationLevel: Transaction.ISOLATION_LEVELS.SERIALIZABLE,
+  }, async (transaction) => {
+    const validation = await scheduleValidation(
+      Number(teacher.id),
+      academic.currentSchoolYear,
+      meetingDay,
+      meetingTime,
+      transaction,
+    );
+    if (validation) return validation;
+
+    let subjectId = input.subjectId ?? null;
+    if (!subjectId && input.subjectName?.trim()) {
+      const normalizedSubject = input.subjectName.trim();
+      const existingSubject = await Subject.findOne({
+        where: { name: normalizedSubject },
+        transaction,
+      });
+      const subject =
+        existingSubject ??
+        (await Subject.create(
+          { name: normalizedSubject, code: null },
+          { transaction },
+        ));
+      subjectId = subject.id as number;
+    }
+    let sectionId = input.sectionId ?? null;
+    if (!sectionId && input.className?.trim()) {
+      const sectionName = input.className.trim();
+      const [section] = await Section.findOrCreate({
+        where: { name: sectionName },
+        defaults: { name: sectionName },
+        transaction,
+      });
+      sectionId = Number(section.id);
+    }
+    const resolvedClassName =
+      (input.className ?? input.subjectName ?? null)
+        ?.toString()
+        .slice(0, 120) ?? null;
+    return Class.create({
+      teacherId: teacher.id,
+      name: resolvedClassName,
+      subjectId: subjectId ?? null,
+      sectionId,
+      gradeLevel: input.gradeLevel ?? null,
+      buildingName: input.buildingName?.trim() || null,
+      meetingDay,
+      meetingTime,
+      academicYear: academic.currentSchoolYear || null,
+    }, { transaction });
   });
-  return cls;
 }
 
 export async function updateClassForTeacher(
@@ -282,42 +404,71 @@ export async function updateClassForTeacher(
   if (!teacher) return null;
   const cls = await Class.findByPk(classId);
   if (!cls || cls.teacherId !== teacher.id) return false;
-
-  let subjectId = input.subjectId ?? cls.subjectId ?? null;
-  if (!input.subjectId && input.subjectName?.trim()) {
-    const normalizedSubject = input.subjectName.trim();
-    const existingSubject = await Subject.findOne({ where: { name: normalizedSubject } });
-    const subject = existingSubject ?? (await Subject.create({ name: normalizedSubject, code: null }));
-    subjectId = subject.id as number;
-  }
-  let sectionId = input.sectionId ?? cls.sectionId ?? null;
-  if (!input.sectionId && input.className?.trim()) {
-    const sectionName = input.className.trim();
-    const [section] = await Section.findOrCreate({
-      where: { name: sectionName },
-      defaults: { name: sectionName },
-    });
-    sectionId = Number(section.id);
-  }
-  const resolvedClassName = (input.className ?? input.subjectName ?? cls.name)?.toString().slice(0, 120) ?? null;
   const meetingDaySource = input.meetingDay !== undefined ? input.meetingDay : cls.meetingDay;
   const meetingDayValue = serializeMeetingDays(meetingDaySource);
   const meetingDay = meetingDayValue ? meetingDayValue.slice(0, 20) : null;
   const meetingTime = (input.meetingTime ?? cls.meetingTime)
     ?.toString()
     .slice(0, 100) ?? null;
+  const academic = await getAcademicContext();
+  const academicYear = cls.academicYear || academic.currentSchoolYear;
+  return sequelize.transaction({
+    isolationLevel: Transaction.ISOLATION_LEVELS.SERIALIZABLE,
+  }, async (transaction) => {
+    const validation = await scheduleValidation(
+      Number(teacher.id),
+      academicYear,
+      meetingDay,
+      meetingTime,
+      transaction,
+      Number(cls.id),
+    );
+    if (validation) return validation;
 
-  await cls.update({
-    subjectId,
-    sectionId,
-    gradeLevel: input.gradeLevel ?? cls.gradeLevel,
-    buildingName: input.buildingName !== undefined ? input.buildingName?.trim() || null : cls.buildingName,
-    name: resolvedClassName,
-    meetingDay,
-    meetingTime,
+    let subjectId = input.subjectId ?? cls.subjectId ?? null;
+    if (!input.subjectId && input.subjectName?.trim()) {
+      const normalizedSubject = input.subjectName.trim();
+      const existingSubject = await Subject.findOne({
+        where: { name: normalizedSubject },
+        transaction,
+      });
+      const subject =
+        existingSubject ??
+        (await Subject.create(
+          { name: normalizedSubject, code: null },
+          { transaction },
+        ));
+      subjectId = subject.id as number;
+    }
+    let sectionId = input.sectionId ?? cls.sectionId ?? null;
+    if (!input.sectionId && input.className?.trim()) {
+      const sectionName = input.className.trim();
+      const [section] = await Section.findOrCreate({
+        where: { name: sectionName },
+        defaults: { name: sectionName },
+        transaction,
+      });
+      sectionId = Number(section.id);
+    }
+    const resolvedClassName =
+      (input.className ?? input.subjectName ?? cls.name)
+        ?.toString()
+        .slice(0, 120) ?? null;
+    await cls.update({
+      subjectId,
+      sectionId,
+      gradeLevel: input.gradeLevel ?? cls.gradeLevel,
+      buildingName:
+        input.buildingName !== undefined
+          ? input.buildingName?.trim() || null
+          : cls.buildingName,
+      name: resolvedClassName,
+      meetingDay,
+      meetingTime,
+      academicYear,
+    }, { transaction });
+    return cls;
   });
-
-  return cls;
 }
 
 export async function deleteClassForTeacher(userId: string, classId: string, password: string) {
@@ -431,11 +582,12 @@ export async function savePublishedGradesForTeacher(
       status: 409,
     };
   }
-  if (quarterFromTerm(input.term) !== academic.gradeEncodingQuarter) {
+  const selectedTerm = normalizeAcademicTerm(input.term);
+  if (selectedTerm !== academic.gradeEncodingTerm) {
     return {
-      error: academic.gradeEncodingQuarter
-        ? `Grades can only be encoded for ${academic.gradeEncodingQuarter}.`
-        : "Grade encoding is not open for an academic quarter.",
+      error: academic.gradeEncodingTerm
+        ? `Grades can only be encoded for ${academic.gradeEncodingTerm}.`
+        : "Grade encoding is not open for an academic term.",
       status: 403,
     };
   }
@@ -469,19 +621,22 @@ export async function savePublishedGradesForTeacher(
   if (!targetClass) return false;
 
   const classId = Number(targetClass.id);
-  const draftName = `${input.term}|${subjectName}|draft`;
-  const publishName = `${input.term}|${subjectName}|published`;
+  const draftName = `${selectedTerm}|${subjectName}|draft`;
+  const publishName = `${selectedTerm}|${subjectName}|published`;
 
   const existingItems = await GradeItem.findAll({
     where: {
       classId,
       academicYear: academic.currentSchoolYear,
-      name: { [Op.like]: `${input.term}|%` },
     },
   });
   const existing = existingItems.find((item) => {
     const parsed = parseGradeItemName(item.name);
-    return !!parsed && parsed.subjectKey === subjectKey;
+    return (
+      !!parsed &&
+      normalizeAcademicTerm(parsed.term) === selectedTerm &&
+      parsed.subjectKey === subjectKey
+    );
   });
   const gradeItem =
     existing ??
@@ -667,13 +822,21 @@ export async function getPublishedGradesForStudent(
   const student = await Student.findOne({ where: { userId } });
   if (!student) return null;
 
-  const rows = [
-    { id: 1, name: "Quarter 1", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
-    { id: 2, name: "Quarter 2", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
-    { id: 3, name: "Quarter 3", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
-    { id: 4, name: "Quarter 4", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
-  ];
-  const targetQuarter = filter?.term ? quarterFromTerm(filter.term) : null;
+  const rows = ACADEMIC_TERMS.map((term, index) => ({
+    id: index + 1,
+    name: term,
+    math: 0,
+    science: 0,
+    english: 0,
+    filipino: 0,
+    mapeh: 0,
+    ap: 0,
+    tle: 0,
+    values: 0,
+  }));
+  const targetTerm = filter?.term
+    ? normalizeAcademicTerm(filter.term)
+    : "";
   const academic = await getAcademicContext();
   const selectedAcademicYear =
     filter?.academicYear?.trim() || academic.currentSchoolYear;
@@ -732,10 +895,10 @@ export async function getPublishedGradesForStudent(
   for (const item of gradeItems) {
     const parsed = parseGradeItemName(item.name);
     if (!parsed || !parsed.published) continue;
-    const quarter = quarterFromTerm(parsed.term);
-    if (!quarter) continue;
-    if (targetQuarter && quarter !== targetQuarter) continue;
-    const row = rows.find((r) => r.name === quarter);
+    const term = normalizeAcademicTerm(parsed.term);
+    if (!term) continue;
+    if (targetTerm && term !== targetTerm) continue;
+    const row = rows.find((r) => r.name === term);
     if (!row) continue;
     const mapped = parsed.subjectKey as keyof typeof row;
     const score = scoreByItemId.get(Number(item.id));
@@ -743,7 +906,7 @@ export async function getPublishedGradesForStudent(
     (row[mapped] as number) = score;
     const subjectScores =
       scoresBySubject.get(parsed.subjectKey) ?? new Map<string, number>();
-    subjectScores.set(quarter, score);
+    subjectScores.set(term, score);
     scoresBySubject.set(parsed.subjectKey, subjectScores);
   }
 
@@ -751,10 +914,9 @@ export async function getPublishedGradesForStudent(
   const finalCandidates: Array<number | null> = [];
   for (const [subject, scores] of scoresBySubject) {
     const values = [
-      scores.get("Quarter 1"),
-      scores.get("Quarter 2"),
-      scores.get("Quarter 3"),
-      scores.get("Quarter 4"),
+      scores.get("Term 1"),
+      scores.get("Term 2"),
+      scores.get("Term 3"),
     ];
     const average = calculateFinalSubjectAverage(values);
     finalCandidates.push(average);
@@ -823,7 +985,10 @@ export async function getPublishedGradesForTeacher(
     const itemGrade = normalizeText(item.gradeLevel ?? itemClass?.gradeLevel);
     const gradeOk =
       !gradeLevel || gradeLevel === "all grades" || itemGrade === gradeLevel;
-    const termOk = !term || normalizeText(parsed.term) === term;
+    const termOk =
+      !term ||
+      normalizeText(normalizeAcademicTerm(parsed.term)) ===
+        normalizeText(normalizeAcademicTerm(term));
     const subjectOk = !selectedSubjectKey || parsed.subjectKey === selectedSubjectKey;
     return gradeOk && termOk && subjectOk;
   });

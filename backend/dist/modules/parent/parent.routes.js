@@ -10,6 +10,7 @@ router.get("/students", auth_middleware_1.requireAuth, (0, role_middleware_1.req
 router.get("/overview", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("parent"), parent_controller_1.overview);
 router.get("/academic-sessions", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("parent"), parent_controller_1.academicSessions);
 router.get("/academic-record", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("parent"), parent_controller_1.academicRecord);
+router.get("/disciplinary-records", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("parent"), parent_controller_1.disciplinaryRecords);
 router.get("/", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin"), parent_controller_1.list);
 router.get("/:id", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin"), parent_controller_1.getById);
 router.post("/", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin"), parent_controller_1.create);

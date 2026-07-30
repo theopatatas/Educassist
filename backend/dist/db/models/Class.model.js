@@ -60,6 +60,11 @@ Class.init({
         allowNull: true,
         field: "meeting_time",
     },
+    academicYear: {
+        type: sequelize_1.DataTypes.STRING(20),
+        allowNull: true,
+        field: "academic_year",
+    },
 }, {
     sequelize: db_1.sequelize,
     tableName: "classes",

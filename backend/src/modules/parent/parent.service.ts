@@ -22,6 +22,21 @@ import {
   getStudentAcademicRecordById,
   getStudentAcademicSessionsById,
 } from "../student/student.service";
+import { ACADEMIC_TERMS, normalizeAcademicTerm } from "../../utils/academic-terms";
+
+function emptyTermGradeTable() {
+  return ACADEMIC_TERMS.map((term) => ({
+    term,
+    math: 0,
+    science: 0,
+    english: 0,
+    filipino: 0,
+    mapeh: 0,
+    ap: 0,
+    tle: 0,
+    values: 0,
+  }));
+}
 
 export type CreateParentInput = {
   email: string;
@@ -272,52 +287,7 @@ export async function getParentOverviewByUserId(
       quizzes: { submitted: 0, averageScore: 0 },
       exams: { upcoming: 0, completed: 0 },
       grades: { average: 0, publishedCount: 0 },
-      gradeTable: [
-        {
-          quarter: "Quarter 1",
-          math: 0,
-          science: 0,
-          english: 0,
-          filipino: 0,
-          mapeh: 0,
-          ap: 0,
-          tle: 0,
-          values: 0,
-        },
-        {
-          quarter: "Quarter 2",
-          math: 0,
-          science: 0,
-          english: 0,
-          filipino: 0,
-          mapeh: 0,
-          ap: 0,
-          tle: 0,
-          values: 0,
-        },
-        {
-          quarter: "Quarter 3",
-          math: 0,
-          science: 0,
-          english: 0,
-          filipino: 0,
-          mapeh: 0,
-          ap: 0,
-          tle: 0,
-          values: 0,
-        },
-        {
-          quarter: "Quarter 4",
-          math: 0,
-          science: 0,
-          english: 0,
-          filipino: 0,
-          mapeh: 0,
-          ap: 0,
-          tle: 0,
-          values: 0,
-        },
-      ],
+      gradeTable: emptyTermGradeTable(),
     };
   }
 
@@ -329,52 +299,7 @@ export async function getParentOverviewByUserId(
       quizzes: { submitted: 0, averageScore: 0 },
       exams: { upcoming: 0, completed: 0 },
       grades: { average: 0, publishedCount: 0 },
-      gradeTable: [
-        {
-          quarter: "Quarter 1",
-          math: 0,
-          science: 0,
-          english: 0,
-          filipino: 0,
-          mapeh: 0,
-          ap: 0,
-          tle: 0,
-          values: 0,
-        },
-        {
-          quarter: "Quarter 2",
-          math: 0,
-          science: 0,
-          english: 0,
-          filipino: 0,
-          mapeh: 0,
-          ap: 0,
-          tle: 0,
-          values: 0,
-        },
-        {
-          quarter: "Quarter 3",
-          math: 0,
-          science: 0,
-          english: 0,
-          filipino: 0,
-          mapeh: 0,
-          ap: 0,
-          tle: 0,
-          values: 0,
-        },
-        {
-          quarter: "Quarter 4",
-          math: 0,
-          science: 0,
-          english: 0,
-          filipino: 0,
-          mapeh: 0,
-          ap: 0,
-          tle: 0,
-          values: 0,
-        },
-      ],
+      gradeTable: emptyTermGradeTable(),
     };
   }
 
@@ -478,81 +403,28 @@ export async function getParentOverviewByUserId(
     esp: "values",
     "aralin panlipunan": "ap",
   };
-  const gradeTable = [
-    {
-      quarter: "Quarter 1",
-      math: 0,
-      science: 0,
-      english: 0,
-      filipino: 0,
-      mapeh: 0,
-      ap: 0,
-      tle: 0,
-      values: 0,
-    },
-    {
-      quarter: "Quarter 2",
-      math: 0,
-      science: 0,
-      english: 0,
-      filipino: 0,
-      mapeh: 0,
-      ap: 0,
-      tle: 0,
-      values: 0,
-    },
-    {
-      quarter: "Quarter 3",
-      math: 0,
-      science: 0,
-      english: 0,
-      filipino: 0,
-      mapeh: 0,
-      ap: 0,
-      tle: 0,
-      values: 0,
-    },
-    {
-      quarter: "Quarter 4",
-      math: 0,
-      science: 0,
-      english: 0,
-      filipino: 0,
-      mapeh: 0,
-      ap: 0,
-      tle: 0,
-      values: 0,
-    },
-  ];
+  const gradeTable = emptyTermGradeTable();
   const scoreByItemId = new Map(
     gradeRows.map((row) => [Number(row.gradeItemId), Number(row.score ?? 0)]),
   );
-  const quarterlyScores = new Map<string, Map<string, number>>();
+  const termScores = new Map<string, Map<string, number>>();
   for (const item of gradeItems) {
     const parts = String(item.name ?? "").split("|");
     if (parts.length < 2) continue;
     const termRaw = parts[0]?.trim() || "";
     const subjectRaw = parts[1]?.trim().toLowerCase() || "";
-    const quarter = termRaw.startsWith("1")
-      ? "Quarter 1"
-      : termRaw.startsWith("2")
-        ? "Quarter 2"
-        : termRaw.startsWith("3")
-          ? "Quarter 3"
-          : termRaw.startsWith("4")
-            ? "Quarter 4"
-            : "";
+    const term = normalizeAcademicTerm(termRaw);
     const subjectKey = subjectKeyMap[subjectRaw];
-    if (!quarter || !subjectKey) continue;
-    const targetRow = gradeTable.find((row) => row.quarter === quarter);
+    if (!term || !subjectKey) continue;
+    const targetRow = gradeTable.find((row) => row.term === term);
     if (!targetRow) continue;
     const score = scoreByItemId.get(Number(item.id));
     if (score === undefined) continue;
     targetRow[subjectKey] = score;
     const subjectScores =
-      quarterlyScores.get(subjectKey) ?? new Map<string, number>();
-    subjectScores.set(quarter, score);
-    quarterlyScores.set(subjectKey, subjectScores);
+      termScores.get(subjectKey) ?? new Map<string, number>();
+    subjectScores.set(term, score);
+    termScores.set(subjectKey, subjectScores);
   }
   const publishedCount = gradeRows.length;
   const gradeAverage = publishedCount
@@ -563,12 +435,11 @@ export async function getParentOverviewByUserId(
     : 0;
   const finalSubjectAverages: Record<string, number> = {};
   const finalCandidates: Array<number | null> = [];
-  for (const [subject, scores] of quarterlyScores) {
+  for (const [subject, scores] of termScores) {
     const values = [
-      scores.get("Quarter 1"),
-      scores.get("Quarter 2"),
-      scores.get("Quarter 3"),
-      scores.get("Quarter 4"),
+      scores.get("Term 1"),
+      scores.get("Term 2"),
+      scores.get("Term 3"),
     ];
     const average = calculateFinalSubjectAverage(values);
     finalCandidates.push(average);

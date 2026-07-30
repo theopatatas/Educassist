@@ -1,4 +1,11 @@
 import { api } from "@/src/lib/http/client";
+import {
+  createSchoolEvent,
+  deleteSchoolEvent,
+  loadDashboardCalendarEvents,
+  normalizeCalendarDate,
+  updateSchoolEvent,
+} from "@/src/features/events/adminCalendar";
 
 export type AdminOverview = {
   users: number;
@@ -64,7 +71,7 @@ export type AdminPendingTask = {
 
 export type AnalyticsFilters = {
   schoolYear: string;
-  quarter: string;
+  term: string;
   gradeLevel: string;
   section: string;
   subject: string;
@@ -88,7 +95,7 @@ export type AdminAnalytics = {
   } | null;
   academic?: {
     currentSchoolYear?: string;
-    currentQuarter?: string;
+    currentTerm?: string;
     gradeEncodingStatus?: string;
     gradePublishingStatus?: string;
   };
@@ -249,24 +256,22 @@ export async function getAdminActivities() {
     : [];
 }
 export async function getAdminCalendarEvents() {
-  const { data } = await api.get("/api/events");
-  return Array.isArray(data?.events) ? data.events.map(fromSharedEvent) : [];
+  const events = await loadDashboardCalendarEvents();
+  return events.map((event) => fromSharedEvent(event));
 }
 export async function createAdminCalendarEvent(
   event: Omit<AdminCalendarEvent, "id">,
 ) {
-  const { data } = await api.post("/api/events", toSharedEvent(event));
-  return fromSharedEvent(data?.event);
+  return fromSharedEvent(await createSchoolEvent(toSharedEvent(event)));
 }
 export async function updateAdminCalendarEvent(
   id: number,
   event: Omit<AdminCalendarEvent, "id">,
 ) {
-  const { data } = await api.patch(`/api/events/${id}`, toSharedEvent(event));
-  return fromSharedEvent(data?.event);
+  return fromSharedEvent(await updateSchoolEvent(id, toSharedEvent(event)));
 }
 export async function deleteAdminCalendarEvent(id: number) {
-  await api.delete(`/api/events/${id}`);
+  await deleteSchoolEvent(id);
 }
 
 type SharedEvent = {
@@ -303,12 +308,15 @@ function adminCategory(category: string) {
         ? "School Activities"
         : category;
 }
-function fromSharedEvent(event: SharedEvent): AdminCalendarEvent {
+function fromSharedEvent(event: SharedEvent | null | undefined): AdminCalendarEvent {
+  const eventDate = normalizeCalendarDate(event?.eventDate);
+  if (!event || !Number(event.id) || !event.title || !eventDate)
+    throw new Error("The Events API returned an incomplete event.");
   return {
     id: Number(event.id),
     title: event.title,
-    date: event.eventDate,
-    endDate: event.endDate ?? null,
+    date: eventDate,
+    endDate: normalizeCalendarDate(event.endDate),
     type: adminCategory(event.category),
     description: event.description ?? null,
     startTime: event.startTime ?? null,

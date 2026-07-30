@@ -21,9 +21,14 @@ import { Teacher } from "../../db/models/Teacher.model";
 import { TeacherLeaveRequest } from "../../db/models/TeacherLeaveRequest.model";
 import { User } from "../../db/models/User.model";
 import { getAcademicContext } from "./settings.service";
+import {
+  gradeItemTermCandidates,
+  normalizeAcademicTerm,
+} from "../../utils/academic-terms";
 
 export type AnalyticsFilterInput = {
   schoolYear?: string;
+  term?: string;
   quarter?: string;
   gradeLevel?: string;
   section?: string;
@@ -64,11 +69,6 @@ const withinDateRange = (
   return true;
 };
 
-function termForQuarter(quarter?: string) {
-  const value = String(quarter ?? "").replace(/\D/g, "");
-  return value ? `${value}${value === "1" ? "st" : value === "2" ? "nd" : value === "3" ? "rd" : "th"} Grading` : "";
-}
-
 function countBy<T>(rows: T[], key: (row: T) => string) {
   const result = new Map<string, number>();
   rows.forEach((row) => {
@@ -79,6 +79,7 @@ function countBy<T>(rows: T[], key: (row: T) => string) {
 }
 
 export async function getAdminAnalytics(filters: AnalyticsFilterInput) {
+  const selectedTerm = normalizeAcademicTerm(filters.term ?? filters.quarter);
   const [
     academic,
     sections,
@@ -171,8 +172,14 @@ export async function getAdminAnalytics(filters: AnalyticsFilterInput) {
         where: {
           ...(filters.schoolYear ? { academicYear: filters.schoolYear } : {}),
           ...(filters.gradeLevel ? { gradeLevel: filters.gradeLevel } : {}),
-          ...(filters.quarter
-            ? { name: { [Op.like]: `${termForQuarter(filters.quarter)}|%` } }
+          ...(selectedTerm
+            ? {
+                [Op.or]: gradeItemTermCandidates(
+                  selectedTerm,
+                ).map((term) => ({
+                  name: { [Op.like]: `${term}|%` },
+                })),
+              }
             : {}),
         },
       }),
@@ -285,7 +292,9 @@ export async function getAdminAnalytics(filters: AnalyticsFilterInput) {
   scopedGrades.forEach((row) => {
     const item = itemMap.get(number(row.gradeItemId));
     if (!item) return;
-    const label = String(item.name).split("|")[0] || "Published Grades";
+    const label =
+      normalizeAcademicTerm(String(item.name).split("|")[0]) ||
+      "Published Grades";
     const values = performanceGroups.get(label) ?? [];
     values.push(number(row.score));
     performanceGroups.set(label, values);

@@ -162,6 +162,9 @@ async function applySchemaPatches() {
         if (!("building_name" in classes)) {
             await qi.sequelize.query("ALTER TABLE `classes` ADD COLUMN `building_name` VARCHAR(120) NULL AFTER `grade_level`;");
         }
+        if (!("academic_year" in classes)) {
+            await qi.sequelize.query("ALTER TABLE `classes` ADD COLUMN `academic_year` VARCHAR(20) NULL AFTER `meeting_time`;");
+        }
     }
     catch {
         // Ignore if table does not exist yet during first boot; sync will create it.
@@ -230,6 +233,33 @@ async function applySchemaPatches() {
         // Ignore if table does not exist yet during first boot; sync will create it.
     }
 }
+function settingRecord(value) {
+    if (!value)
+        return {};
+    if (typeof value === "string") {
+        try {
+            const parsed = JSON.parse(value);
+            return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+                ? parsed
+                : {};
+        }
+        catch {
+            return {};
+        }
+    }
+    return typeof value === "object" && !Array.isArray(value)
+        ? value
+        : {};
+}
+async function backfillClassAcademicYears() {
+    const settings = await models_1.PlatformSetting.findByPk(1);
+    const academic = settingRecord(settings?.academic);
+    const general = settingRecord(settings?.general);
+    const currentSchoolYear = String(academic.currentSchoolYear ?? general.currentAcademicYear ?? "").trim();
+    if (!currentSchoolYear)
+        return;
+    await models_1.Class.update({ academicYear: currentSchoolYear }, { where: { academicYear: null } });
+}
 async function backfillParentStudentLinks() {
     await db_1.sequelize.query("INSERT IGNORE INTO `parent_students` (`parent_id`, `student_id`, `created_at`, `updated_at`) SELECT `id`, `student_id`, NOW(), NOW() FROM `parents` WHERE `student_id` IS NOT NULL;");
 }
@@ -275,6 +305,7 @@ async function initializeDatabase(options) {
     // Avoid repeated ALTER operations that can duplicate indexes in MySQL.
     await db_1.sequelize.sync({ force: options?.force ?? false });
     await applySchemaPatches();
+    await backfillClassAcademicYears();
     await backfillParentStudentLinks();
     await seedReferenceData();
     await seedAdminUser();

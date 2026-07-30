@@ -2,7 +2,9 @@ import type { Request, Response } from "express";
 import {
   createEvent,
   deleteEvent,
+  type EventAudienceContext,
   listEvents,
+  normalizeEventDate,
   updateEvent,
 } from "./events.service";
 import { Attendance } from "../../db/models/Attendance.model";
@@ -12,6 +14,10 @@ import { SchoolEvent } from "../../db/models/SchoolEvent.model";
 import { Op, fn, col } from "sequelize";
 import { EventNotificationRead } from "../../db/models/EventNotificationRead.model";
 import { getParentSelectedStudentByUserId } from "../parent/parent.service";
+import { Teacher } from "../../db/models/Teacher.model";
+import { Class } from "../../db/models/Class.model";
+import { Enrollment } from "../../db/models/Enrollment.model";
+import { normalizeAcademicTerm } from "../../utils/academic-terms";
 
 const categories = new Set([
   "Meeting",
@@ -19,11 +25,12 @@ const categories = new Set([
   "School Activity",
   "Deadlines",
   "Grade Encoding Deadline",
-  "Quarters",
+  "Terms",
   "Exams",
 ]);
 function body(req: Request) {
   const eventDate = String(req.body?.eventDate ?? "").trim();
+  const submittedCategory = String(req.body?.category ?? "").trim();
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Manila",
     year: "numeric",
@@ -32,7 +39,7 @@ function body(req: Request) {
   }).format(new Date());
   return {
     title: String(req.body?.title ?? "").trim(),
-    category: String(req.body?.category ?? "").trim(),
+    category: submittedCategory === "Quarters" ? "Terms" : submittedCategory,
     description: String(req.body?.description ?? "").trim() || null,
     eventDate,
     endDate: String(req.body?.endDate ?? "").trim() || null,
@@ -73,29 +80,103 @@ function validate(
     return "End time must be after start time";
   return null;
 }
-export async function list(req: Request, res: Response) {
+
+async function eventAudienceContext(req: Request): Promise<{
+  context?: EventAudienceContext;
+  forbidden?: boolean;
+}> {
   const role = String(req.user?.role ?? "");
-  let audienceContext:
-    | {
-        gradeLevel?: string | null;
-        sectionId?: number | null;
-        sectionName?: string | null;
-      }
-    | undefined;
+  const userId = Number(req.user?.sub);
   if (role === "parent" && req.user?.sub) {
     const selected = await getParentSelectedStudentByUserId(
       String(req.user.sub),
       typeof req.query.studentId === "string" ? req.query.studentId : undefined,
     );
-    if (selected && "forbidden" in selected)
-      return res
-        .status(403)
-        .json({ ok: false, message: "Student is not linked to this parent" });
-    audienceContext = selected?.student ?? undefined;
+    if (selected && "forbidden" in selected) return { forbidden: true };
+    const student = selected?.student;
+    const enrollments = student
+      ? await Enrollment.findAll({
+          where: { studentId: student.id },
+          attributes: ["classId"],
+        })
+      : [];
+    return {
+      context: student
+        ? {
+            userId,
+            gradeLevels: [student.gradeLevel],
+            sectionIds: [student.sectionId],
+            sectionNames: [student.sectionName],
+            classIds: enrollments.map((row) => Number(row.classId)),
+          }
+        : { userId },
+    };
   }
+  if (role === "student") {
+    const student = await Student.findOne({ where: { userId } });
+    const section = student?.sectionId
+      ? await Section.findByPk(student.sectionId, {
+          attributes: ["id", "name"],
+        })
+      : null;
+    const enrollments = student
+      ? await Enrollment.findAll({
+          where: { studentId: student.id },
+          attributes: ["classId"],
+        })
+      : [];
+    return {
+      context: {
+        userId,
+        gradeLevels: [student?.yearLevel ?? null],
+        sectionIds: [student?.sectionId ?? null],
+        sectionNames: [section?.name ?? null],
+        classIds: enrollments.map((row) => Number(row.classId)),
+      },
+    };
+  }
+  if (role === "teacher") {
+    const teacher = await Teacher.findOne({ where: { userId } });
+    const classes = teacher
+      ? await Class.findAll({ where: { teacherId: teacher.id } })
+      : [];
+    const sectionIds = [
+      teacher?.sectionId ?? null,
+      ...classes.map((row) => row.sectionId),
+    ];
+    const sections = sectionIds.some(Boolean)
+      ? await Section.findAll({
+          where: { id: sectionIds.filter(Boolean) as number[] },
+          attributes: ["id", "name"],
+        })
+      : [];
+    return {
+      context: {
+        userId,
+        gradeLevels: [
+          teacher?.gradeLevel ?? null,
+          ...classes.map((row) => row.gradeLevel),
+        ],
+        sectionIds,
+        sectionNames: sections.map((row) => row.name),
+        classIds: classes.map((row) => Number(row.id)),
+      },
+    };
+  }
+  return { context: { userId } };
+}
+
+export async function list(req: Request, res: Response) {
+  res.setHeader("Cache-Control", "private, no-store");
+  const role = String(req.user?.role ?? "");
+  const resolvedAudience = await eventAudienceContext(req);
+  if (resolvedAudience.forbidden)
+    return res
+      .status(403)
+      .json({ ok: false, message: "Student is not linked to this parent" });
   return res.json({
     ok: true,
-    events: await listEvents(req.query, role, audienceContext),
+    events: await listEvents(req.query, role, resolvedAudience.context),
   });
 }
 export async function create(req: Request, res: Response) {
@@ -112,6 +193,10 @@ export async function create(req: Request, res: Response) {
   const event = (await listEvents({})).find(
     (item) => Number(item.id) === Number(created.id),
   );
+  if (!event)
+    return res
+      .status(500)
+      .json({ ok: false, message: "Created event could not be loaded" });
   return res.status(201).json({ ok: true, event });
 }
 export async function update(req: Request, res: Response) {
@@ -127,6 +212,10 @@ export async function update(req: Request, res: Response) {
   const event = (await listEvents({})).find(
     (item) => Number(item.id) === Number(updated.id),
   );
+  if (!event)
+    return res
+      .status(500)
+      .json({ ok: false, message: "Updated event could not be loaded" });
   return res.json({ ok: true, event });
 }
 export async function remove(req: Request, res: Response) {
@@ -136,7 +225,8 @@ export async function remove(req: Request, res: Response) {
 }
 
 export async function dashboard(_req: Request, res: Response) {
-  const today = new Date().toISOString().slice(0, 10);
+  res.setHeader("Cache-Control", "private, no-store");
+  const today = normalizeEventDate(new Date())!;
   const monthEnd = `${today.slice(0, 7)}-31`;
   const [
     students,
@@ -257,51 +347,29 @@ function gradeEncodingNotificationTitle(
   eventTitle: string,
   description?: string | null,
 ) {
-  const activeQuarter = eventTitle.includes("End of School Year")
+  const activeTerm = eventTitle.includes("End of School Year")
     ? "End of School Year"
-    : eventTitle.match(/Quarter [1-4]/)?.[0] ?? "";
-  const encodedQuarter =
-    description?.match(/Encoding quarter: (Quarter [1-4])/i)?.[1] ?? "";
-  const previousQuarter =
-    encodedQuarter ||
-    (activeQuarter === "Quarter 2"
-      ? "Quarter 1"
-      : activeQuarter === "Quarter 3"
-        ? "Quarter 2"
-        : activeQuarter === "Quarter 4"
-          ? "Quarter 3"
-          : activeQuarter === "End of School Year"
-            ? "Quarter 4"
-            : "");
-  if (activeQuarter === "Quarter 4" && previousQuarter === "Quarter 4")
-    return "Principal set End of School Year Grade Encoding Deadline for Quarter 4 has started";
-  return previousQuarter
-    ? `Principal updated ${previousQuarter} to ${activeQuarter} Grade Encoding Deadline for ${previousQuarter} has started`
+    : normalizeAcademicTerm(eventTitle);
+  const encodedTerm = normalizeAcademicTerm(
+    description?.match(/Encoding (?:term|quarter): ([^.]*)/i)?.[1] ?? "",
+  );
+  const openTerm = encodedTerm || normalizeAcademicTerm(activeTerm);
+  if (activeTerm === "End of School Year" && openTerm === "Term 3")
+    return "Principal set End of School Year Grade Encoding Deadline for Term 3 has started";
+  return openTerm
+    ? `Principal created ${openTerm} Grade Encoding Deadline`
     : `Principal created ${eventTitle}`;
 }
 
 export async function notifications(req: Request, res: Response) {
   const userId = currentUserId(req);
   const role = String(req.user?.role ?? "");
-  let audienceContext:
-    | {
-        gradeLevel?: string | null;
-        sectionId?: number | null;
-        sectionName?: string | null;
-      }
-    | undefined;
-  if (role === "parent" && req.user?.sub) {
-    const selected = await getParentSelectedStudentByUserId(
-      String(req.user.sub),
-      typeof req.query.studentId === "string" ? req.query.studentId : undefined,
-    );
-    if (selected && "forbidden" in selected)
-      return res
-        .status(403)
-        .json({ ok: false, message: "Student is not linked to this parent" });
-    audienceContext = selected?.student ?? undefined;
-  }
-  const events = (await listEvents({}, role, audienceContext))
+  const resolvedAudience = await eventAudienceContext(req);
+  if (resolvedAudience.forbidden)
+    return res
+      .status(403)
+      .json({ ok: false, message: "Student is not linked to this parent" });
+  const events = (await listEvents({}, role, resolvedAudience.context))
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
     .slice(0, 30);
   const eventIds = events.map((event) => Number(event.id));

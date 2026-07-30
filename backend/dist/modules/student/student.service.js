@@ -31,6 +31,20 @@ const Student_model_1 = require("../../db/models/Student.model");
 const Subject_model_1 = require("../../db/models/Subject.model");
 const User_model_1 = require("../../db/models/User.model");
 const settings_service_1 = require("../admin/settings.service");
+const academic_terms_1 = require("../../utils/academic-terms");
+function emptyTermGradeTable() {
+    return academic_terms_1.ACADEMIC_TERMS.map((term) => ({
+        term,
+        math: 0,
+        science: 0,
+        english: 0,
+        filipino: 0,
+        mapeh: 0,
+        ap: 0,
+        tle: 0,
+        values: 0,
+    }));
+}
 async function ensureGuardianAccountForStudent(input, studentId, transaction) {
     const guardianContact = input.guardianContact?.trim();
     if (!guardianContact)
@@ -372,10 +386,9 @@ async function getStudentAcademicRecordById(id, filter) {
             subjectId: Number(subject.id),
             subjectName: subject.name,
             subjectCode: subject.code ?? null,
-            quarter1: null,
-            quarter2: null,
-            quarter3: null,
-            quarter4: null,
+            term1: null,
+            term2: null,
+            term3: null,
             finalGrade: null,
         });
     }
@@ -387,29 +400,27 @@ async function getStudentAcademicRecordById(id, filter) {
         const score = scoreByItemId.get(Number(item.id));
         if (score === undefined)
             continue;
-        const term = String(item.name).split("|")[0]?.trim() ?? "";
+        const storedPeriod = String(item.name).split("|")[0]?.trim() ?? "";
+        const term = (0, academic_terms_1.normalizeAcademicTerm)(storedPeriod);
         const record = records.get(Number(subject.id));
         if (!record)
             continue;
-        if (term.startsWith("1"))
-            record.quarter1 = score;
-        else if (term.startsWith("2"))
-            record.quarter2 = score;
-        else if (term.startsWith("3"))
-            record.quarter3 = score;
-        else if (term.startsWith("4"))
-            record.quarter4 = score;
-        else if (/final/i.test(term))
+        if (term === "Term 1")
+            record.term1 = score;
+        else if (term === "Term 2")
+            record.term2 = score;
+        else if (term === "Term 3")
+            record.term3 = score;
+        else if (/final/i.test(storedPeriod))
             record.finalGrade = score;
     }
     const academicRecords = Array.from(records.values()).map((record) => ({
         ...record,
         finalGrade: record.finalGrade ??
             (0, calculations_1.calculateFinalSubjectAverage)([
-                record.quarter1,
-                record.quarter2,
-                record.quarter3,
-                record.quarter4,
+                record.term1,
+                record.term2,
+                record.term3,
             ]),
     }));
     return {
@@ -558,52 +569,7 @@ async function getStudentOverviewById(id) {
             },
         })
         : [];
-    const gradeTable = [
-        {
-            quarter: "Quarter 1",
-            math: 0,
-            science: 0,
-            english: 0,
-            filipino: 0,
-            mapeh: 0,
-            ap: 0,
-            tle: 0,
-            values: 0,
-        },
-        {
-            quarter: "Quarter 2",
-            math: 0,
-            science: 0,
-            english: 0,
-            filipino: 0,
-            mapeh: 0,
-            ap: 0,
-            tle: 0,
-            values: 0,
-        },
-        {
-            quarter: "Quarter 3",
-            math: 0,
-            science: 0,
-            english: 0,
-            filipino: 0,
-            mapeh: 0,
-            ap: 0,
-            tle: 0,
-            values: 0,
-        },
-        {
-            quarter: "Quarter 4",
-            math: 0,
-            science: 0,
-            english: 0,
-            filipino: 0,
-            mapeh: 0,
-            ap: 0,
-            tle: 0,
-            values: 0,
-        },
-    ];
+    const gradeTable = emptyTermGradeTable();
     const scoreByItemId = new Map(gradeRows.map((row) => [Number(row.gradeItemId), Number(row.score ?? 0)]));
     const labelsFromGrades = new Set();
     for (const item of gradeItems) {
@@ -612,19 +578,11 @@ async function getStudentOverviewById(id) {
             continue;
         const termRaw = parts[0]?.trim() || "";
         const subjectRaw = normalizeText(parts[1]);
-        const quarter = termRaw.startsWith("1")
-            ? "Quarter 1"
-            : termRaw.startsWith("2")
-                ? "Quarter 2"
-                : termRaw.startsWith("3")
-                    ? "Quarter 3"
-                    : termRaw.startsWith("4")
-                        ? "Quarter 4"
-                        : "";
+        const term = (0, academic_terms_1.normalizeAcademicTerm)(termRaw);
         const subjectKey = SUBJECT_KEY_MAP[subjectRaw];
-        if (!quarter || !subjectKey)
+        if (!term || !subjectKey)
             continue;
-        const targetRow = gradeTable.find((row) => row.quarter === quarter);
+        const targetRow = gradeTable.find((row) => row.term === term);
         if (!targetRow)
             continue;
         targetRow[subjectKey] = scoreByItemId.get(Number(item.id)) ?? 0;

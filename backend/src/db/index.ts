@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { sequelize } from "../config/db";
 import { env } from "../config/env";
-import { Subject, User } from "./models";
+import { Class, PlatformSetting, Subject, User } from "./models";
 import "./models"; // <- this must run first (registers User/Teacher/Student)
 
 const DEFAULT_SUBJECTS = [
@@ -210,6 +210,11 @@ export async function applySchemaPatches() {
         "ALTER TABLE `classes` ADD COLUMN `building_name` VARCHAR(120) NULL AFTER `grade_level`;",
       );
     }
+    if (!("academic_year" in classes)) {
+      await qi.sequelize.query(
+        "ALTER TABLE `classes` ADD COLUMN `academic_year` VARCHAR(20) NULL AFTER `meeting_time`;",
+      );
+    }
   } catch {
     // Ignore if table does not exist yet during first boot; sync will create it.
   }
@@ -293,6 +298,37 @@ export async function applySchemaPatches() {
   }
 }
 
+function settingRecord(value: unknown): Record<string, unknown> {
+  if (!value) return {};
+  if (typeof value === "string") {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
+    } catch {
+      return {};
+    }
+  }
+  return typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+async function backfillClassAcademicYears() {
+  const settings = await PlatformSetting.findByPk(1);
+  const academic = settingRecord(settings?.academic);
+  const general = settingRecord(settings?.general);
+  const currentSchoolYear = String(
+    academic.currentSchoolYear ?? general.currentAcademicYear ?? "",
+  ).trim();
+  if (!currentSchoolYear) return;
+  await Class.update(
+    { academicYear: currentSchoolYear },
+    { where: { academicYear: null } },
+  );
+}
+
 async function backfillParentStudentLinks() {
   await sequelize.query(
     "INSERT IGNORE INTO `parent_students` (`parent_id`, `student_id`, `created_at`, `updated_at`) SELECT `id`, `student_id`, NOW(), NOW() FROM `parents` WHERE `student_id` IS NOT NULL;",
@@ -343,6 +379,7 @@ export async function initializeDatabase(options?: { force?: boolean }) {
   // Avoid repeated ALTER operations that can duplicate indexes in MySQL.
   await sequelize.sync({ force: options?.force ?? false });
   await applySchemaPatches();
+  await backfillClassAcademicYears();
   await backfillParentStudentLinks();
   await seedReferenceData();
   await seedAdminUser();

@@ -49,6 +49,13 @@ export async function createMyClass(req: Request, res: Response) {
   if (!userId) return res.status(401).json({ ok: false, message: "Unauthorized" });
   const cls = await createClassForTeacher(userId, req.body ?? {});
   if (!cls) return res.status(404).json({ ok: false, message: "Teacher profile not found" });
+  if ("error" in cls)
+    return res.status(cls.status).json({
+      ok: false,
+      code: cls.error,
+      message: cls.message,
+      conflict: cls.conflict,
+    });
   return res.status(201).json({ ok: true, class: cls });
 }
 
@@ -58,6 +65,13 @@ export async function updateMyClass(req: Request, res: Response) {
   const result = await updateClassForTeacher(userId, req.params.id, req.body ?? {});
   if (result === null) return res.status(404).json({ ok: false, message: "Teacher profile not found" });
   if (result === false) return res.status(404).json({ ok: false, message: "Class not found" });
+  if ("error" in result)
+    return res.status(result.status).json({
+      ok: false,
+      code: result.error,
+      message: result.message,
+      conflict: result.conflict,
+    });
   return res.json({ ok: true, class: result });
 }
 

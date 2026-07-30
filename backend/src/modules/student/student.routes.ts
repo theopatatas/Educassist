@@ -15,6 +15,11 @@ import {
   undoPromotion,
   update,
 } from "./student.controller";
+import {
+  createDisciplinary,
+  listDisciplinary,
+  updateDisciplinary,
+} from "./student-disciplinary.controller";
 
 const router = Router();
 
@@ -38,6 +43,14 @@ router.get(
   requireAuth,
   requireRole("admin", "managed_admin"),
   attendanceHistory,
+);
+router.get("/:id/disciplinary-records", requireAuth, requireRole("admin"), listDisciplinary);
+router.post("/:id/disciplinary-records", requireAuth, requireRole("admin"), createDisciplinary);
+router.patch(
+  "/:id/disciplinary-records/:recordId",
+  requireAuth,
+  requireRole("admin"),
+  updateDisciplinary,
 );
 router.get("/:id", requireAuth, requireRole("admin", "managed_admin", "teacher"), getById);
 router.post("/", requireAuth, requireRole("admin", "managed_admin"), create);

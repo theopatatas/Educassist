@@ -34,12 +34,13 @@ describe("score calculations", () => {
   });
 
   it("computes final subject and overall student averages", () => {
-    expect(calculateFinalSubjectAverage([88, 90, 92, 94])).toBe(91);
-    expect(calculateOverallStudentAverage([91, 87, 93])).toBe(90);
+    expect(calculateFinalSubjectAverage([88, 90, 92])).toBe(90);
+    expect(calculateOverallStudentAverage([90, 87, 93])).toBe(90);
   });
 
   it("does not compute final averages from incomplete grades", () => {
-    expect(calculateFinalSubjectAverage([88, 90, null, 94])).toBeNull();
+    expect(calculateFinalSubjectAverage([88, 90, null])).toBeNull();
+    expect(calculateFinalSubjectAverage([88, 90, 92, 94])).toBeNull();
     expect(calculateOverallStudentAverage([91, null, 93])).toBeNull();
   });
 });

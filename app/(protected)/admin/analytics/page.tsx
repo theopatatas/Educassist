@@ -10,7 +10,7 @@ import {
 import { AnalyticsChart } from "./AnalyticsChart";
 
 type TeacherLoad = { id: number; name: string; subjects: number; sections: number; students: number; averageGrade?: number | null };
-const initialFilters: AnalyticsFilters = { schoolYear: "", quarter: "", gradeLevel: "", section: "", subject: "", teacher: "", student: "", dateFrom: "", dateTo: "" };
+const initialFilters: AnalyticsFilters = { schoolYear: "", term: "", gradeLevel: "", section: "", subject: "", teacher: "", student: "", dateFrom: "", dateTo: "" };
 
 export default function AdminAnalyticsPage() {
   const [filters, setFilters] = useState<AnalyticsFilters>(initialFilters);
@@ -81,7 +81,7 @@ export default function AdminAnalyticsPage() {
   }), [analytics?.sections, sectionSort]);
   const sectionCount = useMemo(() => new Set(students.map((student) => student.sectionId).filter(Boolean)).size, [students]);
   const filterSummary = [
-    ["School Year", filters.schoolYear || "All"], ["Quarter", filters.quarter || "All"],
+    ["School Year", filters.schoolYear || "All"], ["Term", filters.term || "All"],
     ["Grade Level", filters.gradeLevel || "All"],
     ["Section", filters.section || "All"], ["Subject", filters.subject || "All"],
     ["Teacher", filters.teacher || "All"], ["Student", filters.student || "All"],
@@ -115,7 +115,7 @@ export default function AdminAnalyticsPage() {
 
     <AdminPanel title="Global Analytics Filters" description="Every change refreshes all connected analytics sources."><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
       <label className="text-xs font-medium text-slate-600">School Year<select value={filters.schoolYear} onChange={(event) => updateFilter("schoolYear", event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"><option value="">All school years</option>{analytics?.filterOptions?.schoolYears.map((year) => <option key={year} value={year}>{year}</option>)}</select></label>
-      <label className="text-xs font-medium text-slate-600">Quarter<select value={filters.quarter} onChange={(event) => updateFilter("quarter", event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"><option value="">All quarters</option>{[1, 2, 3, 4].map((quarter) => <option key={quarter} value={quarter}>Quarter {quarter}</option>)}</select></label>
+      <label className="text-xs font-medium text-slate-600">Term<select value={filters.term} onChange={(event) => updateFilter("term", event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"><option value="">All terms</option>{[1, 2, 3].map((term) => <option key={term} value={term}>Term {term}</option>)}</select></label>
       <label className="text-xs font-medium text-slate-600">Grade Level<select value={filters.gradeLevel} onChange={(event) => updateFilter("gradeLevel", event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"><option value="">All grades</option>{(analytics?.filterOptions?.gradeLevels ?? gradeOptions).map((grade) => <option key={grade} value={grade}>{grade}</option>)}</select></label>
       <label className="text-xs font-medium text-slate-600">Section<select value={filters.section} onChange={(event) => updateFilter("section", event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"><option value="">All sections</option>{analytics?.filterOptions?.sections.map((section) => <option key={section.id} value={section.id}>{section.name}</option>) ?? sectionOptions.map((section) => <option key={section} value={section}>{section}</option>)}</select></label>
       <label className="text-xs font-medium text-slate-600">Subject<select value={filters.subject} onChange={(event) => updateFilter("subject", event.target.value)} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"><option value="">All subjects</option>{analytics?.filterOptions?.subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}</select></label>
@@ -183,9 +183,9 @@ export default function AdminAnalyticsPage() {
       <AdminPanel title="System Activity Trends" description="Audited system actions recorded during the latest 14 active days."><AnalyticsChart data={analytics?.activityTrend} xKey="label" series={[{ key: "value", label: "Activities", color: "#7c3aed" }]} type="line" loading={loading} error={analyticsUnavailable} /></AdminPanel>
     </div>
 
-    <AdminPanel title="Academic Year & Quarter Summary" description="Current academic configuration from the shared Academic Settings service.">{analyticsUnavailable ? <InsightState error /> : analytics?.academic ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[
+    <AdminPanel title="Academic Year & Term Summary" description="Current academic configuration from the shared Academic Settings service.">{analyticsUnavailable ? <InsightState error /> : analytics?.academic ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[
       ["School Year", analytics.academic.currentSchoolYear],
-      ["Active Quarter", analytics.academic.currentQuarter],
+      ["Active Term", analytics.academic.currentTerm],
       ["Grade Encoding", analytics.academic.gradeEncodingStatus],
       ["Grade Publishing", analytics.academic.gradePublishingStatus],
     ].map(([label, value]) => <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 p-3"><p className="text-xs text-slate-500">{label}</p><b className="mt-1 block text-sm text-slate-800">{value || "Not configured"}</b></div>)}</div> : <InsightState emptyLabel="Academic settings have not been configured." />}</AdminPanel>

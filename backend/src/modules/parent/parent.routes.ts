@@ -4,6 +4,7 @@ import { requireRole } from "../../middleware/role.middleware";
 import {
   academicRecord,
   academicSessions,
+  disciplinaryRecords,
   create,
   getById,
   list,
@@ -35,6 +36,12 @@ router.get(
   requireAuth,
   requireRole("parent"),
   academicRecord,
+);
+router.get(
+  "/disciplinary-records",
+  requireAuth,
+  requireRole("parent"),
+  disciplinaryRecords,
 );
 router.get("/", requireAuth, requireRole("admin"), list);
 router.get("/:id", requireAuth, requireRole("admin"), getById);

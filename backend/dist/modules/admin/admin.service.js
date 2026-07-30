@@ -13,6 +13,7 @@ const ParentStudent_model_1 = require("../../db/models/ParentStudent.model");
 const SchoolEvent_model_1 = require("../../db/models/SchoolEvent.model");
 const Student_model_1 = require("../../db/models/Student.model");
 const SystemAuditLog_model_1 = require("../../db/models/SystemAuditLog.model");
+const academic_terms_1 = require("../../utils/academic-terms");
 const Teacher_model_1 = require("../../db/models/Teacher.model");
 const TeacherLeaveRequest_model_1 = require("../../db/models/TeacherLeaveRequest.model");
 const User_model_1 = require("../../db/models/User.model");
@@ -46,7 +47,10 @@ function auditPresentation(row) {
         ? metadata.previous
         : {};
     const academicYear = String(current.currentSchoolYear ?? previous.currentSchoolYear ?? "");
-    const quarter = String(current.currentQuarter ?? previous.currentQuarter ?? "");
+    const term = (0, academic_terms_1.normalizeActiveAcademicTerm)(current.currentTerm ??
+        current["currentQuarter"] ??
+        previous.currentTerm ??
+        previous["currentQuarter"]);
     const presentations = {
         LEAVE_CREATED: {
             title: "Teacher leave request submitted",
@@ -127,11 +131,20 @@ function auditPresentation(row) {
             category: "academic",
             href: "/admin/settings",
         },
-        ACADEMIC_QUARTER_CHANGED: {
-            title: `${quarter || "Active quarter"} activated`,
+        ACADEMIC_TERM_CHANGED: {
+            title: `${term || "Active term"} activated`,
             description: academicYear
-                ? `${quarter || "The active quarter"} was activated for Academic Year ${academicYear}.`
-                : "The active academic quarter was updated.",
+                ? `${term || "The active term"} was activated for Academic Year ${academicYear}.`
+                : "The active academic term was updated.",
+            module: "Academic Settings",
+            category: "academic",
+            href: "/admin/settings",
+        },
+        ACADEMIC_QUARTER_CHANGED: {
+            title: `${term || "Active term"} activated`,
+            description: academicYear
+                ? `${term || "The active term"} was activated for Academic Year ${academicYear}.`
+                : "The active academic term was updated.",
             module: "Academic Settings",
             category: "academic",
             href: "/admin/settings",
@@ -355,7 +368,13 @@ async function getRecentActivities() {
         activities.push({
             id: `grade-${row.id}`,
             title: "Grades published",
-            description: `${String(row.name).split("|").slice(0, 2).join(" • ")} was published${row.academicYear ? ` for ${row.academicYear}` : ""}.`,
+            description: `${[
+                (0, academic_terms_1.normalizeAcademicTerm)(String(row.name).split("|")[0]) ||
+                    String(row.name).split("|")[0],
+                String(row.name).split("|")[1],
+            ]
+                .filter(Boolean)
+                .join(" • ")} was published${row.academicYear ? ` for ${row.academicYear}` : ""}.`,
             user: userName(actor),
             role: roleLabel(actor?.role || "teacher"),
             module: "Grade Publishing",
@@ -482,12 +501,12 @@ async function getPendingTasks() {
         },
     ];
     if (!academic.currentSchoolYear ||
-        !academic.currentQuarter ||
+        !academic.currentTerm ||
         academic.gradeEncodingStatus === "UNAVAILABLE") {
         tasks.unshift({
             id: "academic-configuration",
             label: "Academic period requires configuration",
-            description: "Set the current academic year and active quarter in Settings.",
+            description: "Set the current academic year and active term in Settings.",
             count: 1,
             status: "critical",
             href: "/admin/settings",

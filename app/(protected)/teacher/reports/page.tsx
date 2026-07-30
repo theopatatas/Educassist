@@ -18,7 +18,7 @@ import {
 type Section = "All" | string;
 type Grade = "All" | string;
 type Subject = "All" | string;
-type Term = "Quarter 1" | "Quarter 2" | "Quarter 3" | "Quarter 4";
+type Term = "Term 1" | "Term 2" | "Term 3";
 type DistributionBar = { label: string; count: number; color: string; heightPct: number };
 type SubjectPerformance = { subject: string; score: number; color: string };
 type TeacherClass = { id: number; name: string | null; gradeLevel: string | null; subjectName?: string | null };
@@ -29,7 +29,7 @@ type LearnerRow = { id: number; name: string; section: string; average: number; 
 const SECTIONS: Section[] = ["All"];
 const GRADES: Grade[] = ["All"];
 const SUBJECTS: Subject[] = ["All"];
-const TERMS: Term[] = ["Quarter 1", "Quarter 2", "Quarter 3", "Quarter 4"];
+const TERMS: Term[] = ["Term 1", "Term 2", "Term 3"];
 
 const SUBJECT_KEY_MAP: Record<string, string> = {
   math: "Math",
@@ -52,18 +52,11 @@ function toSubjectKey(subjectName: string | null | undefined) {
   return SUBJECT_KEY_MAP[normalize(subjectName)] ?? null;
 }
 
-function toGradingTerm(term: Term) {
-  if (term === "Quarter 1") return "1st Grading";
-  if (term === "Quarter 2") return "2nd Grading";
-  if (term === "Quarter 3") return "3rd Grading";
-  return "4th Grading";
-}
-
 export default function TeacherReportsPage() {
   const [section, setSection] = useState<Section>("All");
   const [grade, setGrade] = useState<Grade>("All");
   const [subject, setSubject] = useState<Subject>("All");
-  const [term, setTerm] = useState<Term>("Quarter 3");
+  const [term, setTerm] = useState<Term>("Term 3");
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [classes, setClasses] = useState<TeacherClass[]>([]);
   const [learners, setLearners] = useState<LearnerRow[]>([]);
@@ -88,7 +81,6 @@ export default function TeacherReportsPage() {
   useEffect(() => {
     let active = true;
     setIsLoading(true);
-    const gradingTerm = toGradingTerm(term);
     const filteredClasses =
       section === "All" && grade === "All" && subject === "All"
         ? classes
@@ -110,7 +102,7 @@ export default function TeacherReportsPage() {
                     section: cls.name || "",
                     gradeLevel: cls.gradeLevel || "",
                     subject: toSubjectKey(cls.subjectName),
-                    term: gradingTerm,
+                    term,
                   },
                 })
                 .catch(() => ({ data: { rows: [] } }))

@@ -42,13 +42,13 @@ const SUBJECTS = [
 ] as const;
 
 type SubjectKey = (typeof SUBJECTS)[number]["key"];
-type Term = "1st Grading" | "2nd Grading" | "3rd Grading" | "4th Grading";
+type Term = "Term 1" | "Term 2" | "Term 3";
 type TeacherClass = { id: number; name: string | null; gradeLevel: string | null; subjectName?: string | null };
 type ApiStudent = { id: number; firstName: string; lastName: string };
 type AcademicContext = {
   currentSchoolYear: string;
-  currentQuarter: string;
-  gradeEncodingQuarter: string;
+  currentTerm: string;
+  gradeEncodingTerm: string;
   endOfSchoolYear: boolean;
   gradeEncodingStartDate: string;
   gradeEncodingDeadline: string;
@@ -61,21 +61,11 @@ type AcademicSession = {
   status: "Current" | "Completed";
 };
 const GRADE_FILTERS_STORAGE_KEY = "teacher-grade-portal-filters-v1";
-const TERMS: Term[] = [
-  "1st Grading",
-  "2nd Grading",
-  "3rd Grading",
-  "4th Grading",
-];
+const TERMS: Term[] = ["Term 1", "Term 2", "Term 3"];
 
-function termForQuarter(quarter: string): Term | null {
-  const index = Number(quarter.replace(/\D/g, "")) - 1;
+function normalizeTerm(value: string): Term | null {
+  const index = Number(value.replace(/\D/g, "")) - 1;
   return TERMS[index] ?? null;
-}
-
-function quarterForTerm(term: Term) {
-  const index = TERMS.indexOf(term);
-  return index >= 0 ? `Quarter ${index + 1}` : term;
 }
 
 const SUBJECT_NAME_MAP: Record<string, SubjectKey> = {
@@ -143,14 +133,14 @@ export default function TeacherGradePortalPage() {
     }
   });
   const [term, setTerm] = useState<Term>(() => {
-    if (typeof window === "undefined") return "1st Grading";
+    if (typeof window === "undefined") return "Term 1";
     const raw = window.localStorage.getItem(GRADE_FILTERS_STORAGE_KEY);
-    if (!raw) return "1st Grading";
+    if (!raw) return "Term 1";
     try {
-      const parsed = JSON.parse(raw) as { term?: Term };
-      return parsed.term || "1st Grading";
+      const parsed = JSON.parse(raw) as { term?: string };
+      return normalizeTerm(parsed.term || "") || "Term 1";
     } catch {
-      return "1st Grading";
+      return "Term 1";
     }
   });
   const [query, setQuery] = useState("");
@@ -175,8 +165,8 @@ export default function TeacherGradePortalPage() {
           if (!active) return;
           const context = data?.academic as AcademicContext;
           setAcademic(context);
-          const activeTerm = termForQuarter(
-            context?.gradeEncodingQuarter ?? "",
+          const activeTerm = normalizeTerm(
+            context?.gradeEncodingTerm ?? "",
           );
           if (activeTerm) setTerm(activeTerm);
         })
@@ -513,7 +503,7 @@ export default function TeacherGradePortalPage() {
     return list;
   }, [calcVisibleAverage, grades, query, sortBy]);
   const activeTerm = academic
-    ? termForQuarter(academic.gradeEncodingQuarter)
+    ? normalizeTerm(academic.gradeEncodingTerm)
     : null;
   const isActiveTerm = Boolean(activeTerm && term === activeTerm);
   const encodingOpen =
@@ -578,7 +568,7 @@ export default function TeacherGradePortalPage() {
     }
     if (!isActiveTerm) {
       flashToast(
-        `Only ${academic?.gradeEncodingQuarter || "the open encoding quarter"} can be edited`,
+        `Only ${academic?.gradeEncodingTerm || "the open encoding term"} can be edited`,
       );
       return;
     }
@@ -700,7 +690,7 @@ export default function TeacherGradePortalPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Teacher Gradebook</h1>
           <p className="text-gray-500">
-            Manage and record student grades • {quarterForTerm(term)}
+            Manage and record student grades • {term}
           </p>
         </div>
 
@@ -758,9 +748,9 @@ export default function TeacherGradePortalPage() {
             </p>
           </div>
           <div>
-            <p className="text-sm text-indigo-600">Active Quarter</p>
+            <p className="text-sm text-indigo-600">Active Term</p>
             <p className="font-semibold text-slate-900">
-              {academic?.currentQuarter || "Not configured"}
+              {academic?.currentTerm || "Not configured"}
             </p>
           </div>
           <div>
@@ -852,7 +842,7 @@ export default function TeacherGradePortalPage() {
                       index > activeIndex
                     }
                   >
-                    {`Quarter ${index + 1}`}
+                    {gradingTerm}
                     {!isHistoricalSession &&
                     activeIndex >= 0 &&
                     index > activeIndex
@@ -1000,7 +990,7 @@ export default function TeacherGradePortalPage() {
                             isPublished
                               ? "Published grades are locked"
                               : !isActiveTerm
-                                ? "Previous quarters are read only"
+                                ? "Previous terms are read only"
                                 : !encodingOpen
                                   ? "Grade encoding is locked"
                               : !editableSubjectKeys.has(subj.key)

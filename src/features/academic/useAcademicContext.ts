@@ -6,7 +6,7 @@ import { api } from "@/src/lib/http/client";
 export type AcademicContext = {
   currentSchoolYear: string;
   currentSemester: string;
-  currentQuarter: string;
+  currentTerm: string;
   passingGrade: number | null;
   promotionPolicy: string;
   gradeEncodingStartDate: string;

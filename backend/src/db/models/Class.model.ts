@@ -11,6 +11,7 @@ export class Class extends Model {
   declare buildingName: string | null;
   declare meetingDay: string | null;
   declare meetingTime: string | null;
+  declare academicYear: string | null;
 }
 
 Class.init(
@@ -67,6 +68,11 @@ Class.init(
       type: DataTypes.STRING(100),
       allowNull: true,
       field: "meeting_time",
+    },
+    academicYear: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      field: "academic_year",
     },
   },
   {

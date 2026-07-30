@@ -33,7 +33,7 @@ function categoryStyle(category: string) {
     case "Grade Encoding Deadline":
     case "Deadlines":
       return { dot: "bg-blue-500", badge: "bg-blue-50 text-blue-700" };
-    case "Quarters":
+    case "Terms":
       return { dot: "bg-violet-500", badge: "bg-violet-50 text-violet-700" };
     case "Exams":
       return { dot: "bg-slate-700", badge: "bg-slate-100 text-slate-700" };
@@ -278,7 +278,7 @@ export default function ParentEventCalendar() {
 
       {selectedEvents.length ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4" onMouseDown={(event) => event.target === event.currentTarget && setSelectedEvents([])}>
-          <div className="max-h-[calc(100vh-2rem)] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm text-slate-500">{selectedDate}</p>
@@ -288,7 +288,7 @@ export default function ParentEventCalendar() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="mt-5 space-y-3">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {selectedEvents.map((event) => (
                 <article key={event.id} className="rounded-xl border border-slate-200 p-4">
                   <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${categoryStyle(event.category).badge}`}>{event.category}</span>

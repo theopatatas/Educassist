@@ -34,11 +34,11 @@ const subjects = [
   { key: "tle", label: "TLE" },
   { key: "values", label: "Values" },
 ] as const;
-const quarterLabels = ["Quarter 1", "Quarter 2", "Quarter 3", "Quarter 4"] as const;
+const termLabels = ["Term 1", "Term 2", "Term 3"] as const;
 
 export default function StudentGradePortalPage() {
   const [grades, setGrades] = useState(myGradeRows);
-  const [selectedView, setSelectedView] = useState("Quarter 3");
+  const [selectedView, setSelectedView] = useState("Term 3");
   const [finalSubjectAverages, setFinalSubjectAverages] = useState<
     Record<string, number>
   >({});
@@ -52,10 +52,10 @@ export default function StudentGradePortalPage() {
   const [sessions, setSessions] = useState<AcademicSession[]>([]);
   const [selectedSession, setSelectedSession] =
     useState<AcademicSession | null>(null);
-  const quarterRows = useMemo(() => {
-    const defaults = quarterLabels.map((quarter, idx) => ({
+  const termRows = useMemo(() => {
+    const defaults = termLabels.map((term, idx) => ({
       id: idx + 1,
-      name: quarter,
+      name: term,
       math: 0,
       science: 0,
       english: 0,
@@ -70,8 +70,8 @@ export default function StudentGradePortalPage() {
     return defaults.map((row) => byName.get(row.name) ?? row);
   }, [grades]);
   const selectedRow = useMemo(
-    () => quarterRows.find((r) => r.name === selectedView) ?? quarterRows[0],
-    [quarterRows, selectedView]
+    () => termRows.find((r) => r.name === selectedView) ?? termRows[0],
+    [termRows, selectedView]
   );
 
   const loadSession = useCallback(async (session: AcademicSession) => {
@@ -82,10 +82,10 @@ export default function StudentGradePortalPage() {
       },
     });
         const rows = Array.isArray(data?.rows)
-          ? (data.rows as Array<GradeRow & { quarter?: string }>).map((row, index) => ({
+          ? (data.rows as Array<GradeRow & { term?: string }>).map((row, index) => ({
               ...row,
               id: Number(row.id) || index + 1,
-              name: row.name || row.quarter || `Quarter ${index + 1}`,
+              name: row.name || row.term || `Term ${index + 1}`,
             }))
           : [];
         setGrades(rows);
@@ -275,10 +275,9 @@ export default function StudentGradePortalPage() {
               onChange={(e) => setSelectedView(e.target.value)}
               className="appearance-none rounded-xl border border-gray-200 bg-white py-2 pl-4 pr-10 font-medium text-gray-600 outline-none focus:border-transparent focus:ring-2 focus:ring-indigo-500"
             >
-              <option value="Quarter 1">Quarter 1</option>
-              <option value="Quarter 2">Quarter 2</option>
-              <option value="Quarter 3">Quarter 3</option>
-              <option value="Quarter 4">Quarter 4</option>
+              <option value="Term 1">Term 1</option>
+              <option value="Term 2">Term 2</option>
+              <option value="Term 3">Term 3</option>
             </select>
           </div>
 
@@ -299,7 +298,7 @@ export default function StudentGradePortalPage() {
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="sticky left-0 z-10 min-w-[220px] bg-gray-50 px-6 py-5 text-left text-xs font-bold uppercase tracking-wider text-gray-500">
-                  Quarter
+                  Term
                 </th>
 
                 {subjects.map((subject) => (
@@ -318,7 +317,7 @@ export default function StudentGradePortalPage() {
             </thead>
 
             <tbody className="divide-y divide-gray-100">
-              {quarterRows.map((row) => {
+              {termRows.map((row) => {
                 const rowAvg = Math.round(
                   (row.math +
                     row.science +

@@ -14,7 +14,7 @@ export type GeneralSettings = {
 export type AcademicSettings = {
   currentSchoolYear: string;
   currentSemester: string;
-  currentQuarter: string;
+  currentTerm: string;
   endOfSchoolYear: boolean;
   passingGrade: string;
   promotionPolicy: string;
@@ -27,8 +27,8 @@ export type AcademicSettings = {
 export type AcademicContext = {
   currentSchoolYear: string;
   currentSemester: string;
-  currentQuarter: string;
-  gradeEncodingQuarter: string;
+  currentTerm: string;
+  gradeEncodingTerm: string;
   endOfSchoolYear: boolean;
   passingGrade: number | null;
   promotionPolicy: string;

@@ -34,7 +34,7 @@ type ParentOverview = {
     overallAverage?: number | null;
   };
   gradeTable: Array<{
-    quarter: string;
+    term: string;
     math: number;
     science: number;
     english: number;
@@ -56,10 +56,9 @@ type AcademicSubjectRecord = {
   subjectId: number;
   subjectName: string;
   subjectCode: string | null;
-  quarter1: number | null;
-  quarter2: number | null;
-  quarter3: number | null;
-  quarter4: number | null;
+  term1: number | null;
+  term2: number | null;
+  term3: number | null;
   finalGrade: number | null;
 };
 
@@ -70,10 +69,9 @@ const emptyOverview: ParentOverview = {
   exams: { upcoming: 0, completed: 0 },
   grades: { average: 0, publishedCount: 0 },
   gradeTable: [
-    { quarter: "Quarter 1", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
-    { quarter: "Quarter 2", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
-    { quarter: "Quarter 3", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
-    { quarter: "Quarter 4", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
+    { term: "Term 1", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
+    { term: "Term 2", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
+    { term: "Term 3", math: 0, science: 0, english: 0, filipino: 0, mapeh: 0, ap: 0, tle: 0, values: 0 },
   ],
 };
 
@@ -485,10 +483,9 @@ export default function ParentHome() {
                   {[
                     "Subject",
                     "Code",
-                    "Quarter 1",
-                    "Quarter 2",
-                    "Quarter 3",
-                    "Quarter 4",
+                    "Term 1",
+                    "Term 2",
+                    "Term 3",
                     "Final Grade",
                   ].map((heading, index) => (
                     <th
@@ -512,10 +509,9 @@ export default function ParentHome() {
                       {record.subjectCode || "—"}
                     </td>
                     {[
-                      record.quarter1,
-                      record.quarter2,
-                      record.quarter3,
-                      record.quarter4,
+                      record.term1,
+                      record.term2,
+                      record.term3,
                       record.finalGrade,
                     ].map((grade, index) => (
                       <td key={index} className="px-4 py-3 text-slate-700">
@@ -536,13 +532,13 @@ export default function ParentHome() {
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Student Grades</h2>
-        <p className="mt-1 text-sm text-slate-500">Published grades by quarter</p>
+        <p className="mt-1 text-sm text-slate-500">Published grades by term</p>
         <div className="mt-4 max-w-full overflow-x-auto overscroll-x-contain rounded-xl">
           <table className="w-full min-w-[900px] text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <th className="sticky left-0 bg-slate-50 px-3 py-2">
-                  Quarter
+                  Term
                 </th>
                 <th className="px-3 py-2">Math</th>
                 <th className="px-3 py-2">Science</th>
@@ -559,8 +555,8 @@ export default function ParentHome() {
               {overview.gradeTable.map((row) => {
                 const avg = Math.round((row.math + row.science + row.english + row.filipino + row.mapeh + row.ap + row.tle + row.values) / 8);
                 return (
-                  <tr key={row.quarter} className="hover:bg-slate-50">
-                    <td className="sticky left-0 bg-white px-3 py-2 font-semibold text-slate-900">{row.quarter}</td>
+                  <tr key={row.term} className="hover:bg-slate-50">
+                    <td className="sticky left-0 bg-white px-3 py-2 font-semibold text-slate-900">{row.term}</td>
                     <td className="px-3 py-2 text-slate-700">{row.math}</td>
                     <td className="px-3 py-2 text-slate-700">{row.science}</td>
                     <td className="px-3 py-2 text-slate-700">{row.english}</td>

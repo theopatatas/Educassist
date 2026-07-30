@@ -52,7 +52,7 @@ type ReportRow = Record<string, string | number | null>;
 type Filters = {
   schoolYear: string;
   semester: string;
-  quarter: string;
+  term: string;
   gradeLevel: string;
   section: string;
   subject: string;
@@ -65,7 +65,7 @@ type Filters = {
 const emptyFilters: Filters = {
   schoolYear: "",
   semester: "",
-  quarter: "",
+  term: "",
   gradeLevel: "",
   section: "",
   subject: "",
@@ -129,7 +129,7 @@ const categories = [
 const reportTypes: Record<string, string[]> = {
   academic: [
     "Student Grades",
-    "Quarterly Grades",
+    "Term Grades",
     "Final Grades",
     "Subject Performance",
     "Passing Students",
@@ -383,10 +383,9 @@ export default function AdminReportsPage() {
           nextColumns = [
             "Subject",
             "Code",
-            "Quarter 1",
-            "Quarter 2",
-            "Quarter 3",
-            "Quarter 4",
+            "Term 1",
+            "Term 2",
+            "Term 3",
             "Final Grade",
           ];
           nextRows = records
@@ -398,16 +397,15 @@ export default function AdminReportsPage() {
             .map((record: Record<string, unknown>) => ({
               Subject: record.subjectName as string,
               Code: (record.subjectCode as string) || null,
-              "Quarter 1": record.quarter1 as number | null,
-              "Quarter 2": record.quarter2 as number | null,
-              "Quarter 3": record.quarter3 as number | null,
-              "Quarter 4": record.quarter4 as number | null,
+              "Term 1": record.term1 as number | null,
+              "Term 2": record.term2 as number | null,
+              "Term 3": record.term3 as number | null,
               "Final Grade": record.finalGrade as number | null,
             }));
           if (reportName === "Final Grades") {
             nextColumns = ["Subject", "Code", "Final Grade"];
-          } else if (filters.quarter) {
-            nextColumns = ["Subject", "Code", `Quarter ${filters.quarter}`];
+          } else if (filters.term) {
+            nextColumns = ["Subject", "Code", `Term ${filters.term}`];
           }
         }
       } else if (category === "attendance") {
@@ -618,20 +616,19 @@ export default function AdminReportsPage() {
             <option>Semester unavailable</option>
           </select>
           <select
-            value={filters.quarter}
+            value={filters.term}
             onChange={(event) =>
               setFilters((current) => ({
                 ...current,
-                quarter: event.target.value,
+                term: event.target.value,
               }))
             }
             className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-slate-200"
           >
-            <option value="">All quarters</option>
-            <option value="1">Quarter 1</option>
-            <option value="2">Quarter 2</option>
-            <option value="3">Quarter 3</option>
-            <option value="4">Quarter 4</option>
+            <option value="">All terms</option>
+            <option value="1">Term 1</option>
+            <option value="2">Term 2</option>
+            <option value="3">Term 3</option>
           </select>
           <select
             value={filters.gradeLevel}

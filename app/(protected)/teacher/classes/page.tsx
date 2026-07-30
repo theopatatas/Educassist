@@ -321,6 +321,7 @@ export default function TeacherClassesPage() {
   };
 
   const openEditModal = (cls: ClassItem) => {
+    setSaveError("");
     const { startTime, endTime } = parseStoredClassTimeRange(cls.time);
     setEditClass({
       id: cls.id,
@@ -680,7 +681,10 @@ export default function TeacherClassesPage() {
           </select>
           {!isTakeover ? (
             <button
-              onClick={() => setIsAddModalOpen(true)}
+              onClick={() => {
+                setSaveError("");
+                setIsAddModalOpen(true);
+              }}
               className="flex h-10 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 font-medium text-white shadow-lg shadow-indigo-200 transition-colors hover:bg-indigo-700"
             >
               <Plus className="h-5 w-5" />
@@ -757,7 +761,10 @@ export default function TeacherClassesPage() {
         ))}
 
         {!isTakeover ? <button
-          onClick={() => setIsAddModalOpen(true)}
+          onClick={() => {
+            setSaveError("");
+            setIsAddModalOpen(true);
+          }}
           className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-300 p-6 text-gray-400 transition-all hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600"
         >
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 transition-colors">
@@ -911,13 +918,24 @@ export default function TeacherClassesPage() {
             <div className="flex items-center justify-between border-b border-gray-100 p-6">
               <h2 className="text-xl font-bold text-gray-800">Edit Class</h2>
               <button
-                onClick={() => setIsEditModalOpen(false)}
+                onClick={() => {
+                  setSaveError("");
+                  setIsEditModalOpen(false);
+                }}
                 className="rounded-full p-2 text-gray-500 transition-colors hover:bg-gray-100"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
             <form onSubmit={handleEditClass} className="space-y-4 p-6">
+              {saveError ? (
+                <div
+                  role="alert"
+                  className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+                >
+                  {saveError}
+                </div>
+              ) : null}
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Grade Level</label>
                 <select
@@ -1039,7 +1057,10 @@ export default function TeacherClassesPage() {
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setIsEditModalOpen(false)}
+                  onClick={() => {
+                    setSaveError("");
+                    setIsEditModalOpen(false);
+                  }}
                   className="flex-1 rounded-xl border border-gray-200 py-2.5 font-semibold text-gray-600 transition-colors hover:bg-gray-50"
                 >
                   Cancel
@@ -1058,17 +1079,31 @@ export default function TeacherClassesPage() {
 
       {isAddModalOpen && !isTakeover ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-gray-100 p-6">
               <h2 className="text-xl font-bold text-gray-800">Add New Class</h2>
               <button
-                onClick={() => setIsAddModalOpen(false)}
+                onClick={() => {
+                  setSaveError("");
+                  setIsAddModalOpen(false);
+                }}
                 className="rounded-full p-2 text-gray-500 transition-colors hover:bg-gray-100"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <form onSubmit={handleAddClass} className="space-y-4 p-6">
+            <form
+              onSubmit={handleAddClass}
+              className="grid gap-4 p-6 sm:grid-cols-2"
+            >
+              {saveError ? (
+                <div
+                  role="alert"
+                  className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 sm:col-span-2"
+                >
+                  {saveError}
+                </div>
+              ) : null}
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Grade Level</label>
                 <select
@@ -1164,7 +1199,7 @@ export default function TeacherClassesPage() {
                 </div>
                 <p className="mt-1 text-xs text-gray-500">{newClass.days.length ? newClass.days.join(", ") : "Select one or more weekdays."}</p>
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">Start Time</label>
                   <input
@@ -1187,10 +1222,13 @@ export default function TeacherClassesPage() {
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-3 pt-4 sm:col-span-2">
                 <button
                   type="button"
-                  onClick={() => setIsAddModalOpen(false)}
+                  onClick={() => {
+                    setSaveError("");
+                    setIsAddModalOpen(false);
+                  }}
                   className="flex-1 rounded-xl border border-gray-200 py-2.5 font-semibold text-gray-600 transition-colors hover:bg-gray-50"
                 >
                   Cancel

@@ -36,6 +36,7 @@ import "./ClassTakeover.model";
 import "./TakeoverActivity.model";
 import "./SystemNotification.model";
 import "./SystemAuditLog.model";
+import "./StudentDisciplinaryRecord.model";
 
 export { User } from "./User.model";
 export { Teacher } from "./Teacher.model";
@@ -75,3 +76,4 @@ export { ClassTakeover } from "./ClassTakeover.model";
 export { TakeoverActivity } from "./TakeoverActivity.model";
 export { SystemNotification } from "./SystemNotification.model";
 export { SystemAuditLog } from "./SystemAuditLog.model";
+export { StudentDisciplinaryRecord } from "./StudentDisciplinaryRecord.model";

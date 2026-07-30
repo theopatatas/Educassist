@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -18,6 +18,7 @@ import {
   Moon,
   Pencil,
   Plus,
+  RefreshCw,
   School,
   ShieldCheck,
   Sun,
@@ -50,9 +51,16 @@ import {
   type AdminPendingTask,
   type AdminStudent,
 } from "../_lib/admin-insights";
-import { getLocal, setLocal } from "@/src/lib/storage/local";
+import { setLocal } from "@/src/lib/storage/local";
 import { useAcademicContext } from "@/src/features/academic/useAcademicContext";
 import AcademicDashboardBadges from "../../AcademicDashboardBadges";
+import { useAuth } from "@/src/features/auth/hooks";
+import { getApiErrorMessage } from "@/src/lib/http/errorMessage";
+import {
+  calendarDate as buildCalendarDate,
+  calendarDateRangeOccursInMonth,
+  calendarDateRangeOccursOn,
+} from "@/src/features/events/adminCalendar";
 
 const emptyOverview: AdminOverview = {
   users: 0,
@@ -110,7 +118,7 @@ const calendarStorageKey = "educassist_admin_calendar_events";
 const eventLegend = [
   { label: "Deadlines", color: "bg-red-500" },
   { label: "Grade Encoding Deadline", color: "bg-blue-500" },
-  { label: "Quarters", color: "bg-purple-500" },
+  { label: "Terms", color: "bg-purple-500" },
   { label: "Meetings", color: "bg-green-500" },
   { label: "Holidays", color: "bg-orange-500" },
   { label: "School Activities", color: "bg-yellow-400" },
@@ -136,6 +144,7 @@ function eventDateLabel(event: Pick<AdminCalendarEvent, "date" | "endDate">) {
 
 export default function AdminDashboard() {
   const academic = useAcademicContext();
+  const { hydrated, user } = useAuth();
   const [overview, setOverview] = useState<AdminOverview>(emptyOverview);
   const [students, setStudents] = useState<AdminStudent[]>([]);
   const [subjectCount, setSubjectCount] = useState<number | null>(null);
@@ -145,7 +154,9 @@ export default function AdminDashboard() {
   const [activities, setActivities] = useState<AdminActivity[]>([]);
   const [activitiesUnavailable, setActivitiesUnavailable] = useState(false);
   const [events, setEvents] = useState<AdminCalendarEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
   const [eventsUnavailable, setEventsUnavailable] = useState(false);
+  const eventRequestId = useRef(0);
   const [eventModalOpen, setEventModalOpen] = useState(false);
   const [viewingDate, setViewingDate] = useState<string | null>(null);
   const [viewingEvent, setViewingEvent] = useState<AdminCalendarEvent | null>(
@@ -155,6 +166,7 @@ export default function AdminDashboard() {
     null,
   );
   const [eventStatus, setEventStatus] = useState("");
+  const [savingEvent, setSavingEvent] = useState(false);
   const [passwordAction, setPasswordAction] = useState<{
     type: "edit" | "delete";
     event: AdminCalendarEvent;
@@ -202,13 +214,6 @@ export default function AdminDashboard() {
     getAdminActivities()
       .then((value) => active && setActivities(value))
       .catch(() => active && setActivitiesUnavailable(true));
-    getAdminCalendarEvents()
-      .then((value) => active && setEvents(value))
-      .catch(() => {
-        if (!active) return;
-        setEvents(getLocal<AdminCalendarEvent[]>(calendarStorageKey) ?? []);
-        setEventsUnavailable(true);
-      });
     getAdminPendingTasks()
       .then((value) => active && setTasks(value))
       .catch(() => active && setTasksUnavailable(true));
@@ -216,6 +221,35 @@ export default function AdminDashboard() {
       active = false;
     };
   }, []);
+
+  const loadCalendarEvents = useCallback(async () => {
+    if (!hydrated || user?.role !== "super_admin") return;
+    const requestId = ++eventRequestId.current;
+    setEventsLoading(true);
+    setEventsUnavailable(false);
+    try {
+      const value = await getAdminCalendarEvents();
+      if (requestId !== eventRequestId.current) return;
+      setEvents(value);
+      setLocal(calendarStorageKey, value);
+    } catch {
+      if (requestId !== eventRequestId.current) return;
+      setEventsUnavailable(true);
+    } finally {
+      if (requestId === eventRequestId.current) setEventsLoading(false);
+    }
+  }, [hydrated, user?.role]);
+
+  useEffect(() => {
+    if (!hydrated || user?.role !== "super_admin") return;
+    void loadCalendarEvents();
+    const refresh = () => void loadCalendarEvents();
+    window.addEventListener("educassist-event-updated", refresh);
+    return () => {
+      eventRequestId.current += 1;
+      window.removeEventListener("educassist-event-updated", refresh);
+    };
+  }, [hydrated, loadCalendarEvents, user?.role]);
 
   const sectionCount = useMemo(
     () =>
@@ -242,13 +276,15 @@ export default function AdminDashboard() {
     1,
   ).getDay();
   const totalCells = Math.ceil((firstDay + daysInMonth) / 7) * 7;
-  const monthStart = `${calendarDate.getFullYear()}-${String(calendarDate.getMonth() + 1).padStart(2, "0")}-01`;
-  const monthEnd = `${calendarDate.getFullYear()}-${String(calendarDate.getMonth() + 1).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`;
   const eventOccursOn = (event: AdminCalendarEvent, date: string) =>
-    event.date <= date && (event.endDate || event.date) >= date;
+    calendarDateRangeOccursOn(event.date, event.endDate, date);
   const monthEvents = events.filter(
     (event) =>
-      event.date <= monthEnd && (event.endDate || event.date) >= monthStart,
+      calendarDateRangeOccursInMonth(
+        event.date,
+        event.endDate,
+        calendarDate,
+      ),
   );
   const today = new Date();
   const currentHour = today.getHours();
@@ -271,7 +307,7 @@ export default function AdminDashboard() {
       Deadlines: "text-red-600",
       "Grade Encoding Deadline": "text-blue-600",
       "DepEd Forms": "text-blue-600",
-      Quarters: "text-purple-600",
+      Terms: "text-purple-600",
       Meetings: "text-green-600",
       Holidays: "text-orange-600",
       "School Activities": "text-yellow-600",
@@ -308,10 +344,16 @@ export default function AdminDashboard() {
     setEventModalOpen(true);
   };
   const saveCalendarEvent = async () => {
-    if (!eventForm.title.trim() || !eventForm.date) return;
+    if (!eventForm.title.trim() || !eventForm.date) {
+      setEventStatus("Title and date are required.");
+      return;
+    }
+    if (savingEvent) return;
+    setSavingEvent(true);
     setEventStatus("Saving event…");
     if (eventForm.endDate && eventForm.endDate < eventForm.date) {
       setEventStatus("End date must be on or after the start date.");
+      setSavingEvent(false);
       return;
     }
     if (
@@ -320,6 +362,7 @@ export default function AdminDashboard() {
       eventForm.endTime <= eventForm.startTime
     ) {
       setEventStatus("End time must be after start time.");
+      setSavingEvent(false);
       return;
     }
     const payload = {
@@ -338,30 +381,28 @@ export default function AdminDashboard() {
         ? await updateAdminCalendarEvent(editingEvent.id, payload)
         : await createAdminCalendarEvent(payload);
       setEvents((current) =>
-        editingEvent
-          ? current.map((event) =>
-              event.id === editingEvent.id ? saved : event,
-            )
-          : [...current, saved],
+        [...current.filter((event) => event.id !== saved.id), saved].sort(
+          (left, right) =>
+            left.date.localeCompare(right.date) ||
+            String(left.startTime ?? "").localeCompare(
+              String(right.startTime ?? ""),
+          ),
+        ),
       );
+      const [year, month] = saved.date.split("-").map(Number);
+      if (year && month) setCalendarDate(new Date(year, month - 1, 1));
+      setEventModalOpen(false);
       window.dispatchEvent(new Event("educassist-event-updated"));
-    } catch {
-      const saved: AdminCalendarEvent = {
-        ...payload,
-        id: editingEvent?.id ?? Date.now(),
-      };
-      setEvents((current) => {
-        const next = editingEvent
-          ? current.map((event) =>
-              event.id === editingEvent.id ? saved : event,
-            )
-          : [...current, saved];
-        setLocal(calendarStorageKey, next);
-        return next;
-      });
-      setEventsUnavailable(true);
+    } catch (error) {
+      setEventStatus(
+        getApiErrorMessage(
+          error,
+          "The event could not be saved. Please try again.",
+        ),
+      );
+    } finally {
+      setSavingEvent(false);
     }
-    setEventModalOpen(false);
   };
   const requestPasswordConfirmation = (
     type: "edit" | "delete",
@@ -463,7 +504,7 @@ export default function AdminDashboard() {
     {
       label: "Current School Year",
       value: academic?.currentSchoolYear || null,
-      description: academic?.currentQuarter || "Academic period unavailable",
+      description: academic?.currentTerm || "Academic period unavailable",
       icon: CalendarDays,
       href: "/admin/settings",
       tone: "violet" as const,
@@ -562,7 +603,39 @@ export default function AdminDashboard() {
                 {monthEvents.length}
               </span>
             </div>
-            {monthEvents.length ? (
+            {eventsLoading ? (
+              <div
+                aria-label="Loading events"
+                className="grid gap-2 sm:grid-cols-2"
+              >
+                {[0, 1, 2, 3].map((item) => (
+                  <div
+                    key={item}
+                    className="h-[62px] animate-pulse rounded-xl border border-slate-200 bg-white"
+                  />
+                ))}
+              </div>
+            ) : eventsUnavailable && !events.length ? (
+              <div
+                role="alert"
+                className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-5 text-center"
+              >
+                <p className="text-xs font-semibold text-rose-700">
+                  Events could not be loaded
+                </p>
+                <p className="mt-1 text-[11px] text-rose-600">
+                  Check your connection and try again.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void loadCalendarEvents()}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Retry
+                </button>
+              </div>
+            ) : monthEvents.length ? (
               <div className="grid max-h-[360px] gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
                 {monthEvents.map((event) => (
                   <div
@@ -614,11 +687,23 @@ export default function AdminDashboard() {
                 </p>
               </div>
             )}
-            {eventsUnavailable ? (
-              <p className="mt-2 text-[10px] text-slate-400">
-                Events are saved in this browser while the calendar server is
-                unavailable.
-              </p>
+            {eventsUnavailable && events.length ? (
+              <div
+                role="alert"
+                className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2"
+              >
+                <p className="text-[11px] text-amber-700">
+                  The latest events could not be synchronized.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void loadCalendarEvents()}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 hover:text-amber-950"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  Retry
+                </button>
+              </div>
             ) : null}
           </div>
           <div className="mb-3 flex items-center justify-between rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
@@ -666,7 +751,11 @@ export default function AdminDashboard() {
                 const day = index - firstDay + 1;
                 const valid = day > 0 && day <= daysInMonth;
                 const date = valid
-                  ? `${calendarDate.getFullYear()}-${String(calendarDate.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+                  ? buildCalendarDate(
+                      calendarDate.getFullYear(),
+                      calendarDate.getMonth() + 1,
+                      day,
+                    )
                   : "";
                 const dayEvents = events.filter((event) =>
                   eventOccursOn(event, date),
@@ -863,7 +952,7 @@ export default function AdminDashboard() {
             event.target === event.currentTarget && setViewingEvent(null)
           }
         >
-          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div className="flex min-w-0 gap-3">
                 <i
@@ -956,7 +1045,7 @@ export default function AdminDashboard() {
             event.target === event.currentTarget && setViewingDate(null)
           }
         >
-          <div className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">
@@ -981,7 +1070,7 @@ export default function AdminDashboard() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="mt-5 space-y-3">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {selectedDayEvents.map((event) => (
                 <div
                   key={event.id}
@@ -1239,6 +1328,7 @@ export default function AdminDashboard() {
                 <button
                   type="button"
                   disabled={
+                    savingEvent ||
                     !eventForm.title.trim() ||
                     !eventForm.date ||
                     !eventForm.targetAudience
@@ -1246,7 +1336,11 @@ export default function AdminDashboard() {
                   onClick={saveCalendarEvent}
                   className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:-translate-y-0.5 hover:bg-slate-800 hover:shadow-md active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {editingEvent ? "Save Changes" : "Add Event"}
+                  {savingEvent
+                    ? "Saving…"
+                    : editingEvent
+                      ? "Save Changes"
+                      : "Add Event"}
                 </button>
               </div>
             </div>

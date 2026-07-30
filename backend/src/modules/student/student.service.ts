@@ -17,6 +17,21 @@ import { Student } from "../../db/models/Student.model";
 import { Subject } from "../../db/models/Subject.model";
 import { User } from "../../db/models/User.model";
 import { getAcademicContext } from "../admin/settings.service";
+import { ACADEMIC_TERMS, normalizeAcademicTerm } from "../../utils/academic-terms";
+
+function emptyTermGradeTable() {
+  return ACADEMIC_TERMS.map((term) => ({
+    term,
+    math: 0,
+    science: 0,
+    english: 0,
+    filipino: 0,
+    mapeh: 0,
+    ap: 0,
+    tle: 0,
+    values: 0,
+  }));
+}
 
 export type CreateStudentInput = {
   email: string;
@@ -475,10 +490,9 @@ export async function getStudentAcademicRecordById(
       subjectId: number;
       subjectName: string;
       subjectCode: string | null;
-      quarter1: number | null;
-      quarter2: number | null;
-      quarter3: number | null;
-      quarter4: number | null;
+      term1: number | null;
+      term2: number | null;
+      term3: number | null;
       finalGrade: number | null;
     }
   >();
@@ -487,10 +501,9 @@ export async function getStudentAcademicRecordById(
       subjectId: Number(subject.id),
       subjectName: subject.name,
       subjectCode: subject.code ?? null,
-      quarter1: null,
-      quarter2: null,
-      quarter3: null,
-      quarter4: null,
+      term1: null,
+      term2: null,
+      term3: null,
       finalGrade: null,
     });
   }
@@ -500,24 +513,23 @@ export async function getStudentAcademicRecordById(
     if (!subject) continue;
     const score = scoreByItemId.get(Number(item.id));
     if (score === undefined) continue;
-    const term = String(item.name).split("|")[0]?.trim() ?? "";
+    const storedPeriod = String(item.name).split("|")[0]?.trim() ?? "";
+    const term = normalizeAcademicTerm(storedPeriod);
     const record = records.get(Number(subject.id));
     if (!record) continue;
-    if (term.startsWith("1")) record.quarter1 = score;
-    else if (term.startsWith("2")) record.quarter2 = score;
-    else if (term.startsWith("3")) record.quarter3 = score;
-    else if (term.startsWith("4")) record.quarter4 = score;
-    else if (/final/i.test(term)) record.finalGrade = score;
+    if (term === "Term 1") record.term1 = score;
+    else if (term === "Term 2") record.term2 = score;
+    else if (term === "Term 3") record.term3 = score;
+    else if (/final/i.test(storedPeriod)) record.finalGrade = score;
   }
   const academicRecords = Array.from(records.values()).map((record) => ({
     ...record,
     finalGrade:
       record.finalGrade ??
       calculateFinalSubjectAverage([
-        record.quarter1,
-        record.quarter2,
-        record.quarter3,
-        record.quarter4,
+        record.term1,
+        record.term2,
+        record.term3,
       ]),
   }));
   return {
@@ -695,52 +707,7 @@ export async function getStudentOverviewById(id: string) {
       })
     : [];
 
-  const gradeTable = [
-    {
-      quarter: "Quarter 1",
-      math: 0,
-      science: 0,
-      english: 0,
-      filipino: 0,
-      mapeh: 0,
-      ap: 0,
-      tle: 0,
-      values: 0,
-    },
-    {
-      quarter: "Quarter 2",
-      math: 0,
-      science: 0,
-      english: 0,
-      filipino: 0,
-      mapeh: 0,
-      ap: 0,
-      tle: 0,
-      values: 0,
-    },
-    {
-      quarter: "Quarter 3",
-      math: 0,
-      science: 0,
-      english: 0,
-      filipino: 0,
-      mapeh: 0,
-      ap: 0,
-      tle: 0,
-      values: 0,
-    },
-    {
-      quarter: "Quarter 4",
-      math: 0,
-      science: 0,
-      english: 0,
-      filipino: 0,
-      mapeh: 0,
-      ap: 0,
-      tle: 0,
-      values: 0,
-    },
-  ];
+  const gradeTable = emptyTermGradeTable();
   const scoreByItemId = new Map(
     gradeRows.map((row) => [Number(row.gradeItemId), Number(row.score ?? 0)]),
   );
@@ -751,18 +718,10 @@ export async function getStudentOverviewById(id: string) {
     if (parts.length < 2) continue;
     const termRaw = parts[0]?.trim() || "";
     const subjectRaw = normalizeText(parts[1]);
-    const quarter = termRaw.startsWith("1")
-      ? "Quarter 1"
-      : termRaw.startsWith("2")
-        ? "Quarter 2"
-        : termRaw.startsWith("3")
-          ? "Quarter 3"
-          : termRaw.startsWith("4")
-            ? "Quarter 4"
-            : "";
+    const term = normalizeAcademicTerm(termRaw);
     const subjectKey = SUBJECT_KEY_MAP[subjectRaw];
-    if (!quarter || !subjectKey) continue;
-    const targetRow = gradeTable.find((row) => row.quarter === quarter);
+    if (!term || !subjectKey) continue;
+    const targetRow = gradeTable.find((row) => row.term === term);
     if (!targetRow) continue;
     targetRow[subjectKey] = scoreByItemId.get(Number(item.id)) ?? 0;
     labelsFromGrades.add(SUBJECT_LABEL_BY_KEY[subjectKey]);

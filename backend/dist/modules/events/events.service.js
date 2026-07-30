@@ -1,12 +1,31 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createEvent = void 0;
+exports.normalizeEventDate = normalizeEventDate;
 exports.listEvents = listEvents;
 exports.updateEvent = updateEvent;
 exports.deleteEvent = deleteEvent;
 const sequelize_1 = require("sequelize");
 const SchoolEvent_model_1 = require("../../db/models/SchoolEvent.model");
 const User_model_1 = require("../../db/models/User.model");
+const academic_terms_1 = require("../../utils/academic-terms");
+function normalizeEventDate(value) {
+    if (!value)
+        return null;
+    if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value))
+        return value;
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime()))
+        return null;
+    const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Manila",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).formatToParts(date);
+    const part = (type) => parts.find((item) => item.type === type)?.value ?? "";
+    return `${part("year")}-${part("month")}-${part("day")}`;
+}
 async function listEvents(query, audienceRole, audienceContext) {
     const today = new Intl.DateTimeFormat("en-CA", {
         timeZone: "Asia/Manila",
@@ -18,7 +37,9 @@ async function listEvents(query, audienceRole, audienceContext) {
         attributes: ["id", "eventDate", "endDate", "status"],
     });
     await Promise.all(statusRows.map((event) => {
-        const expected = (event.endDate || event.eventDate) < today ? "Completed" : "Scheduled";
+        const eventDate = normalizeEventDate(event.eventDate) ?? "";
+        const endDate = normalizeEventDate(event.endDate);
+        const expected = (endDate || eventDate) < today ? "Completed" : "Scheduled";
         return event.status === expected
             ? Promise.resolve(event)
             : event.update({ status: expected });
@@ -66,6 +87,13 @@ async function listEvents(query, audienceRole, audienceContext) {
         const creator = byId.get(String(event.createdBy));
         return {
             ...row,
+            category: event.category === "Quarters" ? "Terms" : event.category,
+            title: (0, academic_terms_1.normalizeAcademicPeriodText)(event.title),
+            description: event.description
+                ? (0, academic_terms_1.normalizeAcademicPeriodText)(event.description)
+                : null,
+            eventDate: normalizeEventDate(event.eventDate) ?? "",
+            endDate: normalizeEventDate(event.endDate),
             creator: creator
                 ? {
                     id: Number(creator.id),
@@ -86,30 +114,50 @@ async function listEvents(query, audienceRole, audienceContext) {
         const audience = event.targetAudience.trim().toLowerCase();
         if (audience === "all users")
             return true;
-        if (audienceRole === "teacher")
-            return audience === "all teachers";
-        if (audienceRole === "student")
-            return audience === "all students" ||
-                audience === "grade level" ||
-                audience.startsWith("grade level:") ||
-                audience === "section" ||
-                audience.startsWith("section:");
-        if (audienceRole === "parent")
-            if (audience === "all parents")
-                return true;
-            else if (audience === "grade level")
-                return true;
-            else if (audience.startsWith("grade level:")) {
-                const target = audience.slice("grade level:".length).trim();
-                return target === String(audienceContext?.gradeLevel ?? "").toLowerCase();
-            }
-            else if (audience === "section")
-                return true;
-            else if (audience.startsWith("section:")) {
-                const target = audience.slice("section:".length).trim();
-                return (target === String(audienceContext?.sectionId ?? "").toLowerCase() ||
-                    target === String(audienceContext?.sectionName ?? "").toLowerCase());
-            }
+        if (audienceRole === "teacher" && audience === "all teachers")
+            return true;
+        if (audienceRole === "student" && audience === "all students")
+            return true;
+        if (audienceRole === "parent" && audience === "all parents")
+            return true;
+        const valuesAfter = (prefix) => audience.startsWith(`${prefix}:`)
+            ? audience
+                .slice(prefix.length + 1)
+                .split(",")
+                .map((value) => value.trim())
+                .filter(Boolean)
+            : [];
+        const gradeLevels = (audienceContext?.gradeLevels ?? [])
+            .filter(Boolean)
+            .map((value) => String(value).toLowerCase());
+        const sectionIds = (audienceContext?.sectionIds ?? [])
+            .filter(Boolean)
+            .map(String);
+        const sectionNames = (audienceContext?.sectionNames ?? [])
+            .filter(Boolean)
+            .map((value) => String(value).toLowerCase());
+        const classIds = (audienceContext?.classIds ?? [])
+            .filter(Boolean)
+            .map(String);
+        if (audience === "grade level")
+            return gradeLevels.length > 0;
+        if (audience.startsWith("grade level:"))
+            return valuesAfter("grade level").some((value) => gradeLevels.includes(value));
+        if (audience === "section")
+            return sectionIds.length > 0 || sectionNames.length > 0;
+        if (audience.startsWith("section:"))
+            return valuesAfter("section").some((value) => sectionIds.includes(value) || sectionNames.includes(value));
+        if (audience === "specific class")
+            return classIds.length > 0;
+        if (audience.startsWith("specific class:"))
+            return valuesAfter("specific class").some((value) => classIds.includes(value));
+        if (audience.startsWith("specific users:") ||
+            audience.startsWith("specific user:")) {
+            const prefix = audience.startsWith("specific users")
+                ? "specific users"
+                : "specific user";
+            return valuesAfter(prefix).includes(String(audienceContext?.userId ?? ""));
+        }
         return false;
     });
 }

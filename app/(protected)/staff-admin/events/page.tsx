@@ -10,12 +10,17 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { api } from "@/src/lib/http/client";
 import {
   AdminMetricCard,
   AdminPanel,
   InsightState,
 } from "../../admin/_components/AdminInsightsUI";
+import {
+  createSchoolEvent,
+  deleteSchoolEvent,
+  loadSchoolEvents,
+  updateSchoolEvent,
+} from "@/src/features/events/adminCalendar";
 
 type Category = "Meeting" | "Holiday" | "School Activity";
 type EventRow = {
@@ -73,19 +78,14 @@ export default function StaffAdminEventsPage() {
   const load = useCallback(() => {
     setLoading(true);
     setError("");
-    api
-      .get("/api/events", {
-        params: {
+    loadSchoolEvents({
           search: query || undefined,
           category: category || undefined,
           status: status || undefined,
           dateFrom: dateFrom || undefined,
           dateTo: dateTo || undefined,
-        },
       })
-      .then(({ data }) =>
-        setEvents(Array.isArray(data.events) ? data.events : []),
-      )
+      .then((rows) => setEvents(rows as EventRow[]))
       .catch((reason) =>
         setError(
           reason.response?.data?.message || "Events could not be loaded.",
@@ -151,8 +151,8 @@ export default function StaffAdminEventsPage() {
     setSaving(true);
     setError("");
     try {
-      if (editing) await api.patch(`/api/events/${editing.id}`, form);
-      else await api.post("/api/events", form);
+      if (editing) await updateSchoolEvent(editing.id, form);
+      else await createSchoolEvent(form);
       window.dispatchEvent(new Event("educassist-event-updated"));
       setOpen(false);
       setNotice(
@@ -172,7 +172,7 @@ export default function StaffAdminEventsPage() {
     if (!deleting || saving) return;
     setSaving(true);
     try {
-      await api.delete(`/api/events/${deleting.id}`);
+      await deleteSchoolEvent(deleting.id);
       window.dispatchEvent(new Event("educassist-event-updated"));
       setDeleting(null);
       setViewing(null);
@@ -621,7 +621,7 @@ function Details({
 }) {
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+      <div className="max-h-[calc(100vh-2rem)] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
         <div className="flex justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-violet-600">

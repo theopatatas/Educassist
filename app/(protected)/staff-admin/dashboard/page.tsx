@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   ChevronLeft,
@@ -20,6 +20,12 @@ import {
   AdminPanel,
   InsightState,
 } from "../../admin/_components/AdminInsightsUI";
+import {
+  calendarDate,
+  calendarEventOccursOn,
+  calendarEventsForMonth,
+  loadAdminEventDashboard,
+} from "@/src/features/events/adminCalendar";
 
 type EventRow = {
   id: number;
@@ -51,7 +57,7 @@ type Overview = {
 type GradeProgress = {
   academic: {
     currentSchoolYear: string;
-    currentQuarter: string;
+    currentTerm: string;
     gradeEncodingDeadline: string;
     gradeEncodingStatus: string;
   };
@@ -78,32 +84,29 @@ export default function StaffAdminDashboardPage() {
   const [gradeProgress, setGradeProgress] = useState<GradeProgress | null>(
     null,
   );
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     setError(false);
     Promise.all([
-      api.get("/api/events/dashboard"),
+      loadAdminEventDashboard(),
       api.get("/api/admin/settings/academic/progress"),
     ])
-      .then(([dashboardResponse, progressResponse]) => {
-        setData(dashboardResponse.data.overview);
-        setGradeProgress(progressResponse.data?.progress ?? null);
-      })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
-  };
-  useEffect(() => {
-    Promise.all([
-      api.get("/api/events/dashboard"),
-      api.get("/api/admin/settings/academic/progress"),
-    ])
-      .then(([dashboardResponse, progressResponse]) => {
-        setData(dashboardResponse.data.overview);
+      .then(([dashboardOverview, progressResponse]) => {
+        setData(dashboardOverview as unknown as Overview);
         setGradeProgress(progressResponse.data?.progress ?? null);
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, []);
+  useEffect(() => {
+    const initialLoad = window.setTimeout(load, 0);
+    const refresh = () => load();
+    window.addEventListener("educassist-event-updated", refresh);
+    return () => {
+      window.clearTimeout(initialLoad);
+      window.removeEventListener("educassist-event-updated", refresh);
+    };
+  }, [load]);
   const monthLabel = month.toLocaleDateString("en-US", {
     month: "long",
     year: "numeric",
@@ -120,14 +123,16 @@ export default function StaffAdminDashboardPage() {
       (_, index) => {
         const day = index - first + 1;
         if (day < 1 || day > days) return null;
-        const date = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        const date = calendarDate(
+          month.getFullYear(),
+          month.getMonth() + 1,
+          day,
+        );
         return {
           day,
           date,
           events: (data?.calendarEvents ?? []).filter(
-            (event) =>
-              event.eventDate <= date &&
-              (event.endDate || event.eventDate) >= date,
+            (event) => calendarEventOccursOn(event, date),
           ),
         };
       },
@@ -135,20 +140,12 @@ export default function StaffAdminDashboardPage() {
   }, [data?.calendarEvents, month]);
   const monthEvents = useMemo(
     () =>
-      (data?.calendarEvents ?? []).filter((event) => {
-        const start = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}-01`;
-        const end = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}-${String(new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()).padStart(2, "0")}`;
-        return (
-          event.eventDate <= end && (event.endDate || event.eventDate) >= start
-        );
-      }),
+      calendarEventsForMonth(data?.calendarEvents ?? [], month),
     [data?.calendarEvents, month],
   );
   const selectedDayEvents = viewingDate
     ? (data?.calendarEvents ?? []).filter(
-        (event) =>
-          event.eventDate <= viewingDate &&
-          (event.endDate || event.eventDate) >= viewingDate,
+        (event) => calendarEventOccursOn(event, viewingDate),
       )
     : [];
   const eventStyle = (category: string) =>
@@ -250,13 +247,13 @@ export default function StaffAdminDashboardPage() {
       </div>
       <AdminPanel
         title="Grade Submission Progress"
-        description="Read-only status for the active academic quarter."
+        description="Read-only status for the active academic term."
       >
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-xl bg-slate-50 p-4">
             <p className="text-xs text-slate-500">Active Period</p>
             <p className="mt-1 font-semibold text-slate-900">
-              {gradeProgress?.academic.currentQuarter || "Unavailable"}
+              {gradeProgress?.academic.currentTerm || "Unavailable"}
             </p>
           </div>
           {[
@@ -481,7 +478,7 @@ export default function StaffAdminDashboardPage() {
             event.target === event.currentTarget && setViewingEvent(null)
           }
         >
-          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div className="flex min-w-0 gap-3">
                 <i
@@ -545,7 +542,7 @@ export default function StaffAdminDashboardPage() {
             event.target === event.currentTarget && setViewingDate(null)
           }
         >
-          <div className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">
@@ -568,7 +565,7 @@ export default function StaffAdminDashboardPage() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="mt-5 space-y-3">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {selectedDayEvents.map((event) => (
                 <button
                   type="button"

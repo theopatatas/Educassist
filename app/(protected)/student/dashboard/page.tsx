@@ -56,7 +56,7 @@ type CalendarEvent = {
     | "Holiday"
     | "School Activity"
     | "Deadline"
-    | "Quarter"
+    | "Term"
     | "School Event";
   color: string;
   sortTimestamp: number;
@@ -128,9 +128,9 @@ function schoolEventStyle(category: string) {
         type: "Deadline" as const,
         color: "bg-blue-100 text-blue-700 border-blue-200",
       };
-    case "Quarters":
+    case "Terms":
       return {
-        type: "Quarter" as const,
+        type: "Term" as const,
         color: "bg-violet-100 text-violet-700 border-violet-200",
       };
     default:
@@ -710,7 +710,7 @@ export default function StudentDashboard() {
           />
 
           <div
-            className="fixed left-1/2 top-1/2 z-50 w-[520px] max-w-[92vw] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl bg-white shadow-2xl"
+            className="fixed left-1/2 top-1/2 z-50 max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-5xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl bg-white shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3 bg-gray-50 p-5 shadow-[0_1px_0_0_rgba(15,23,42,0.06)]">
@@ -731,7 +731,7 @@ export default function StudentDashboard() {
               </button>
             </div>
 
-            <div className="space-y-3 p-5">
+            <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3">
               {selectedDateEvents.items.map((event) => (
                 <div key={event.id} className="rounded-2xl border border-gray-100 p-4">
                   <div className="flex items-start justify-between gap-3">

@@ -6,6 +6,7 @@ import {
   ChevronDown,
   LogOut,
   Settings,
+  Scale,
   UserCircle,
   X,
   Users,
@@ -253,6 +254,15 @@ export default function ParentHeader() {
           </div>
 
           <div className="flex shrink-0 items-center gap-1 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => router.push("/parent/disciplinary-records")}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 text-sm font-medium text-slate-700 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 sm:px-3"
+              aria-label="Open disciplinary records"
+            >
+              <Scale className="h-4 w-4" />
+              <span className="hidden xl:inline">Disciplinary Records</span>
+            </button>
             <EventNotifications
               eventHref="/parent/dashboard"
               studentId={selectedStudentId}
@@ -297,6 +307,15 @@ export default function ParentHeader() {
                       className="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-slate-50"
                     >
                       <Settings className="h-4 w-4" /> Settings
+                    </button>
+                    <button
+                      onClick={() => {
+                        router.push("/parent/disciplinary-records");
+                        setShowProfileMenu(false);
+                      }}
+                      className="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-slate-50"
+                    >
+                      <Scale className="h-4 w-4" /> Disciplinary Records
                     </button>
                     <div className="my-2 border-t" />
                     <button

@@ -26,18 +26,18 @@ export function calculateAttendancePercentage(present: number, total: number) {
 }
 
 export function calculateFinalSubjectAverage(
-  quarterlyGrades: Array<number | null | undefined>,
+  termGrades: Array<number | null | undefined>,
 ) {
   if (
-    quarterlyGrades.length !== 4 ||
-    quarterlyGrades.some(
+    termGrades.length !== 3 ||
+    termGrades.some(
       (grade) => grade === null || grade === undefined || !Number.isFinite(grade),
     )
   ) {
     return null;
   }
   return Math.round(
-    (quarterlyGrades as number[]).reduce((sum, grade) => sum + grade, 0) / 4,
+    (termGrades as number[]).reduce((sum, grade) => sum + grade, 0) / 3,
   );
 }
 

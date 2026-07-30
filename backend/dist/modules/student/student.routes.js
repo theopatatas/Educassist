@@ -4,6 +4,7 @@ const express_1 = require("express");
 const auth_middleware_1 = require("../../middleware/auth.middleware");
 const role_middleware_1 = require("../../middleware/role.middleware");
 const student_controller_1 = require("./student.controller");
+const student_disciplinary_controller_1 = require("./student-disciplinary.controller");
 const router = (0, express_1.Router)();
 router.get("/me", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("student"), student_controller_1.me);
 router.get("/", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin", "managed_admin", "teacher"), student_controller_1.list);
@@ -11,6 +12,9 @@ router.get("/:id/overview", auth_middleware_1.requireAuth, (0, role_middleware_1
 router.get("/:id/academic-sessions", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin", "managed_admin"), student_controller_1.academicSessions);
 router.get("/:id/academic-record", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin", "managed_admin"), student_controller_1.academicRecord);
 router.get("/:id/attendance", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin", "managed_admin"), student_controller_1.attendanceHistory);
+router.get("/:id/disciplinary-records", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin"), student_disciplinary_controller_1.listDisciplinary);
+router.post("/:id/disciplinary-records", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin"), student_disciplinary_controller_1.createDisciplinary);
+router.patch("/:id/disciplinary-records/:recordId", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin"), student_disciplinary_controller_1.updateDisciplinary);
 router.get("/:id", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin", "managed_admin", "teacher"), student_controller_1.getById);
 router.post("/", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin", "managed_admin"), student_controller_1.create);
 router.patch("/:id", auth_middleware_1.requireAuth, (0, role_middleware_1.requireRole)("admin", "managed_admin"), student_controller_1.update);

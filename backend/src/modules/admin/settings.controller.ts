@@ -40,20 +40,20 @@ function validateSection(
       return "A valid school email is required";
   }
   if (section === "academic") {
-    if (!text("currentSchoolYear") || !text("currentQuarter"))
-      return "School year and quarter are required";
+    const submittedTerm = String(
+      value.currentTerm ?? value["currentQuarter"] ?? "",
+    ).trim();
+    if (!text("currentSchoolYear") || !submittedTerm)
+      return "School year and term are required";
     if (
-      ![
-        "Quarter 1",
-        "Quarter 2",
-        "Quarter 3",
-        "Quarter 4",
-        "End of School Year",
-      ].includes(
-        text("currentQuarter"),
+      !["Term 1", "Term 2", "Term 3", "End of School Year"].includes(
+        submittedTerm
+          .replace(/^Quarter 1$/i, "Term 1")
+          .replace(/^Quarter 2$/i, "Term 2")
+          .replace(/^Quarter [34]$/i, "Term 3"),
       )
     )
-      return "Academic period must be Quarter 1, Quarter 2, Quarter 3, Quarter 4, or End of School Year";
+      return "Academic period must be Term 1, Term 2, Term 3, or End of School Year";
     const passingGrade = Number(value.passingGrade);
     if (
       !Number.isFinite(passingGrade) ||

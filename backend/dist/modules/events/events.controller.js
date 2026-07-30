@@ -17,17 +17,22 @@ const SchoolEvent_model_1 = require("../../db/models/SchoolEvent.model");
 const sequelize_1 = require("sequelize");
 const EventNotificationRead_model_1 = require("../../db/models/EventNotificationRead.model");
 const parent_service_1 = require("../parent/parent.service");
+const Teacher_model_1 = require("../../db/models/Teacher.model");
+const Class_model_1 = require("../../db/models/Class.model");
+const Enrollment_model_1 = require("../../db/models/Enrollment.model");
+const academic_terms_1 = require("../../utils/academic-terms");
 const categories = new Set([
     "Meeting",
     "Holiday",
     "School Activity",
     "Deadlines",
     "Grade Encoding Deadline",
-    "Quarters",
+    "Terms",
     "Exams",
 ]);
 function body(req) {
     const eventDate = String(req.body?.eventDate ?? "").trim();
+    const submittedCategory = String(req.body?.category ?? "").trim();
     const today = new Intl.DateTimeFormat("en-CA", {
         timeZone: "Asia/Manila",
         year: "numeric",
@@ -36,7 +41,7 @@ function body(req) {
     }).format(new Date());
     return {
         title: String(req.body?.title ?? "").trim(),
-        category: String(req.body?.category ?? "").trim(),
+        category: submittedCategory === "Quarters" ? "Terms" : submittedCategory,
         description: String(req.body?.description ?? "").trim() || null,
         eventDate,
         endDate: String(req.body?.endDate ?? "").trim() || null,
@@ -71,20 +76,96 @@ function validate(value, restrictSpecialCharacters = false) {
         return "End time must be after start time";
     return null;
 }
-async function list(req, res) {
+async function eventAudienceContext(req) {
     const role = String(req.user?.role ?? "");
-    let audienceContext;
+    const userId = Number(req.user?.sub);
     if (role === "parent" && req.user?.sub) {
         const selected = await (0, parent_service_1.getParentSelectedStudentByUserId)(String(req.user.sub), typeof req.query.studentId === "string" ? req.query.studentId : undefined);
         if (selected && "forbidden" in selected)
-            return res
-                .status(403)
-                .json({ ok: false, message: "Student is not linked to this parent" });
-        audienceContext = selected?.student ?? undefined;
+            return { forbidden: true };
+        const student = selected?.student;
+        const enrollments = student
+            ? await Enrollment_model_1.Enrollment.findAll({
+                where: { studentId: student.id },
+                attributes: ["classId"],
+            })
+            : [];
+        return {
+            context: student
+                ? {
+                    userId,
+                    gradeLevels: [student.gradeLevel],
+                    sectionIds: [student.sectionId],
+                    sectionNames: [student.sectionName],
+                    classIds: enrollments.map((row) => Number(row.classId)),
+                }
+                : { userId },
+        };
     }
+    if (role === "student") {
+        const student = await Student_model_1.Student.findOne({ where: { userId } });
+        const section = student?.sectionId
+            ? await Section_model_1.Section.findByPk(student.sectionId, {
+                attributes: ["id", "name"],
+            })
+            : null;
+        const enrollments = student
+            ? await Enrollment_model_1.Enrollment.findAll({
+                where: { studentId: student.id },
+                attributes: ["classId"],
+            })
+            : [];
+        return {
+            context: {
+                userId,
+                gradeLevels: [student?.yearLevel ?? null],
+                sectionIds: [student?.sectionId ?? null],
+                sectionNames: [section?.name ?? null],
+                classIds: enrollments.map((row) => Number(row.classId)),
+            },
+        };
+    }
+    if (role === "teacher") {
+        const teacher = await Teacher_model_1.Teacher.findOne({ where: { userId } });
+        const classes = teacher
+            ? await Class_model_1.Class.findAll({ where: { teacherId: teacher.id } })
+            : [];
+        const sectionIds = [
+            teacher?.sectionId ?? null,
+            ...classes.map((row) => row.sectionId),
+        ];
+        const sections = sectionIds.some(Boolean)
+            ? await Section_model_1.Section.findAll({
+                where: { id: sectionIds.filter(Boolean) },
+                attributes: ["id", "name"],
+            })
+            : [];
+        return {
+            context: {
+                userId,
+                gradeLevels: [
+                    teacher?.gradeLevel ?? null,
+                    ...classes.map((row) => row.gradeLevel),
+                ],
+                sectionIds,
+                sectionNames: sections.map((row) => row.name),
+                classIds: classes.map((row) => Number(row.id)),
+            },
+        };
+    }
+    return { context: { userId } };
+}
+async function list(req, res) {
+    res.setHeader("Cache-Control", "private, no-store");
+    const role = String(req.user?.role ?? "");
+    const resolvedAudience = await eventAudienceContext(req);
+    if (resolvedAudience.forbidden)
+        return res
+            .status(403)
+            .json({ ok: false, message: "Student is not linked to this parent" });
     return res.json({
         ok: true,
-        events: await (0, events_service_1.listEvents)(req.query, role, audienceContext),
+        events: await (0, events_service_1.listEvents)(req.query, role, resolvedAudience.context),
     });
 }
 async function create(req, res) {
@@ -96,6 +177,10 @@ async function create(req, res) {
     const userId = Number(req.user?.sub);
     const created = await (0, events_service_1.createEvent)(value, userId);
     const event = (await (0, events_service_1.listEvents)({})).find((item) => Number(item.id) === Number(created.id));
+    if (!event)
+        return res
+            .status(500)
+            .json({ ok: false, message: "Created event could not be loaded" });
     return res.status(201).json({ ok: true, event });
 }
 async function update(req, res) {
@@ -108,6 +193,10 @@ async function update(req, res) {
     if (!updated)
         return res.status(404).json({ ok: false, message: "Event not found" });
     const event = (await (0, events_service_1.listEvents)({})).find((item) => Number(item.id) === Number(updated.id));
+    if (!event)
+        return res
+            .status(500)
+            .json({ ok: false, message: "Updated event could not be loaded" });
     return res.json({ ok: true, event });
 }
 async function remove(req, res) {
@@ -116,7 +205,8 @@ async function remove(req, res) {
         : res.status(404).json({ ok: false, message: "Event not found" });
 }
 async function dashboard(_req, res) {
-    const today = new Date().toISOString().slice(0, 10);
+    res.setHeader("Cache-Control", "private, no-store");
+    const today = (0, events_service_1.normalizeEventDate)(new Date());
     const monthEnd = `${today.slice(0, 7)}-31`;
     const [students, activeStudents, attendanceRows, upcomingEvents, calendarEvents, gradeRows, sectionRows,] = await Promise.all([
         Student_model_1.Student.count({ where: { archivedAt: null } }),
@@ -207,39 +297,26 @@ function currentUserId(req) {
     return Number(req.user?.sub);
 }
 function gradeEncodingNotificationTitle(eventTitle, description) {
-    const activeQuarter = eventTitle.includes("End of School Year")
+    const activeTerm = eventTitle.includes("End of School Year")
         ? "End of School Year"
-        : eventTitle.match(/Quarter [1-4]/)?.[0] ?? "";
-    const encodedQuarter = description?.match(/Encoding quarter: (Quarter [1-4])/i)?.[1] ?? "";
-    const previousQuarter = encodedQuarter ||
-        (activeQuarter === "Quarter 2"
-            ? "Quarter 1"
-            : activeQuarter === "Quarter 3"
-                ? "Quarter 2"
-                : activeQuarter === "Quarter 4"
-                    ? "Quarter 3"
-                    : activeQuarter === "End of School Year"
-                        ? "Quarter 4"
-                        : "");
-    if (activeQuarter === "Quarter 4" && previousQuarter === "Quarter 4")
-        return "Principal set End of School Year Grade Encoding Deadline for Quarter 4 has started";
-    return previousQuarter
-        ? `Principal updated ${previousQuarter} to ${activeQuarter} Grade Encoding Deadline for ${previousQuarter} has started`
+        : (0, academic_terms_1.normalizeAcademicTerm)(eventTitle);
+    const encodedTerm = (0, academic_terms_1.normalizeAcademicTerm)(description?.match(/Encoding (?:term|quarter): ([^.]*)/i)?.[1] ?? "");
+    const openTerm = encodedTerm || (0, academic_terms_1.normalizeAcademicTerm)(activeTerm);
+    if (activeTerm === "End of School Year" && openTerm === "Term 3")
+        return "Principal set End of School Year Grade Encoding Deadline for Term 3 has started";
+    return openTerm
+        ? `Principal created ${openTerm} Grade Encoding Deadline`
         : `Principal created ${eventTitle}`;
 }
 async function notifications(req, res) {
     const userId = currentUserId(req);
     const role = String(req.user?.role ?? "");
-    let audienceContext;
-    if (role === "parent" && req.user?.sub) {
-        const selected = await (0, parent_service_1.getParentSelectedStudentByUserId)(String(req.user.sub), typeof req.query.studentId === "string" ? req.query.studentId : undefined);
-        if (selected && "forbidden" in selected)
-            return res
-                .status(403)
-                .json({ ok: false, message: "Student is not linked to this parent" });
-        audienceContext = selected?.student ?? undefined;
-    }
-    const events = (await (0, events_service_1.listEvents)({}, role, audienceContext))
+    const resolvedAudience = await eventAudienceContext(req);
+    if (resolvedAudience.forbidden)
+        return res
+            .status(403)
+            .json({ ok: false, message: "Student is not linked to this parent" });
+    const events = (await (0, events_service_1.listEvents)({}, role, resolvedAudience.context))
         .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
         .slice(0, 30);
     const eventIds = events.map((event) => Number(event.id));

@@ -23,6 +23,7 @@ import {
 import { api } from "@/src/lib/http/client";
 import { AdminMetricCard } from "../_components/AdminInsightsUI";
 import { verifyAdminPassword } from "../_lib/admin-insights";
+import { StudentDisciplinaryRecords } from "./StudentDisciplinaryRecords";
 
 type StudentRow = {
   id: number;
@@ -58,10 +59,9 @@ type AcademicSubjectRecord = {
   subjectId: number;
   subjectName: string;
   subjectCode?: string | null;
-  quarter1: number | null;
-  quarter2: number | null;
-  quarter3: number | null;
-  quarter4: number | null;
+  term1: number | null;
+  term2: number | null;
+  term3: number | null;
   finalGrade: number | null;
 };
 type StudentAcademicSession = {
@@ -87,7 +87,7 @@ type StudentOverview = {
   attendance: { present: number; late: number; absent: number; rate: number };
   subjects: string[];
   gradeTable: Array<{
-    quarter: string;
+    term: string;
     math: number;
     science: number;
     english: number;
@@ -110,7 +110,7 @@ const emptyStudentOverview: StudentOverview = {
   subjects: [],
   gradeTable: [
     {
-      quarter: "Quarter 1",
+      term: "Term 1",
       math: 0,
       science: 0,
       english: 0,
@@ -121,7 +121,7 @@ const emptyStudentOverview: StudentOverview = {
       values: 0,
     },
     {
-      quarter: "Quarter 2",
+      term: "Term 2",
       math: 0,
       science: 0,
       english: 0,
@@ -132,18 +132,7 @@ const emptyStudentOverview: StudentOverview = {
       values: 0,
     },
     {
-      quarter: "Quarter 3",
-      math: 0,
-      science: 0,
-      english: 0,
-      filipino: 0,
-      mapeh: 0,
-      ap: 0,
-      tle: 0,
-      values: 0,
-    },
-    {
-      quarter: "Quarter 4",
+      term: "Term 3",
       math: 0,
       science: 0,
       english: 0,
@@ -518,8 +507,8 @@ export default function AdminStudentsPage() {
     const normalizedSubject = selectedSubject.trim().toLowerCase();
     const key = SUBJECT_TO_KEY[normalizedSubject];
     return rows.map((row, index) => {
-      const quarterLabel =
-        row.quarter?.replace("Quarter ", "Q") || `Q${index + 1}`;
+      const termLabel =
+        row.term?.replace("Term ", "T") || `T${index + 1}`;
       if (!key || selectedSubject === "All") {
         const avg = Math.round(
           (row.math +
@@ -532,9 +521,9 @@ export default function AdminStudentsPage() {
             row.values) /
             8,
         );
-        return { quarter: quarterLabel, value: avg };
+        return { term: termLabel, value: avg };
       }
-      return { quarter: quarterLabel, value: Number(row[key] ?? 0) };
+      return { term: termLabel, value: Number(row[key] ?? 0) };
     });
   }, [overview.gradeTable, selectedSubject]);
 
@@ -1343,6 +1332,10 @@ export default function AdminStudentsPage() {
                   </dl>
                 </section>
               </div>
+              <StudentDisciplinaryRecords
+                studentId={activeStudent.id}
+                studentName={`${activeStudent.firstName} ${activeStudent.lastName}`}
+              />
               <section className="rounded-2xl border border-slate-200 p-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -1470,7 +1463,7 @@ export default function AdminStudentsPage() {
                         />
 
                         {chart.points.map((point) => (
-                          <g key={point.quarter}>
+                          <g key={point.term}>
                             <circle
                               cx={point.x}
                               cy={point.y}
@@ -1489,7 +1482,7 @@ export default function AdminStudentsPage() {
                               y={chart.height - 10}
                               className="fill-slate-500 text-[11px]"
                             >
-                              {point.quarter}
+                              {point.term}
                             </text>
                           </g>
                         ))}
@@ -1582,10 +1575,9 @@ export default function AdminStudentsPage() {
                                 {[
                                   "Subject",
                                   "Code",
-                                  "Quarter 1",
-                                  "Quarter 2",
-                                  "Quarter 3",
-                                  "Quarter 4",
+                                  "Term 1",
+                                  "Term 2",
+                                  "Term 3",
                                   "Final Grade",
                                 ].map((heading) => (
                                   <th
@@ -1610,10 +1602,9 @@ export default function AdminStudentsPage() {
                                     {record.subjectCode || "—"}
                                   </td>
                                   {[
-                                    record.quarter1,
-                                    record.quarter2,
-                                    record.quarter3,
-                                    record.quarter4,
+                                    record.term1,
+                                    record.term2,
+                                    record.term3,
                                     record.finalGrade,
                                   ].map((grade, index) => (
                                     <td key={index} className="px-4 py-3">

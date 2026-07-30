@@ -25,6 +25,7 @@ const Teacher_model_1 = require("../../db/models/Teacher.model");
 const TeacherLeaveRequest_model_1 = require("../../db/models/TeacherLeaveRequest.model");
 const User_model_1 = require("../../db/models/User.model");
 const settings_service_1 = require("./settings.service");
+const academic_terms_1 = require("../../utils/academic-terms");
 const number = (value) => Number(value ?? 0);
 const round = (value, places = 1) => {
     const factor = 10 ** places;
@@ -49,10 +50,6 @@ const withinDateRange = (value, from, to) => {
         return false;
     return true;
 };
-function termForQuarter(quarter) {
-    const value = String(quarter ?? "").replace(/\D/g, "");
-    return value ? `${value}${value === "1" ? "st" : value === "2" ? "nd" : value === "3" ? "rd" : "th"} Grading` : "";
-}
 function countBy(rows, key) {
     const result = new Map();
     rows.forEach((row) => {
@@ -62,6 +59,7 @@ function countBy(rows, key) {
     return result;
 }
 async function getAdminAnalytics(filters) {
+    const selectedTerm = (0, academic_terms_1.normalizeAcademicTerm)(filters.term ?? filters.quarter);
     const [academic, sections, subjects, teachers, students, classes, parents, parentLinks, users, leaves, takeovers, auditLogs, chatLogs, lessonPlans,] = await Promise.all([
         (0, settings_service_1.getAcademicContext)(),
         Section_model_1.Section.findAll(),
@@ -123,8 +121,12 @@ async function getAdminAnalytics(filters) {
             where: {
                 ...(filters.schoolYear ? { academicYear: filters.schoolYear } : {}),
                 ...(filters.gradeLevel ? { gradeLevel: filters.gradeLevel } : {}),
-                ...(filters.quarter
-                    ? { name: { [sequelize_1.Op.like]: `${termForQuarter(filters.quarter)}|%` } }
+                ...(selectedTerm
+                    ? {
+                        [sequelize_1.Op.or]: (0, academic_terms_1.gradeItemTermCandidates)(selectedTerm).map((term) => ({
+                            name: { [sequelize_1.Op.like]: `${term}|%` },
+                        })),
+                    }
                     : {}),
             },
         }),
@@ -215,7 +217,8 @@ async function getAdminAnalytics(filters) {
         const item = itemMap.get(number(row.gradeItemId));
         if (!item)
             return;
-        const label = String(item.name).split("|")[0] || "Published Grades";
+        const label = (0, academic_terms_1.normalizeAcademicTerm)(String(item.name).split("|")[0]) ||
+            "Published Grades";
         const values = performanceGroups.get(label) ?? [];
         values.push(number(row.score));
         performanceGroups.set(label, values);

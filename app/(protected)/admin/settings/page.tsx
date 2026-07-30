@@ -66,7 +66,7 @@ const blankGeneral: GeneralSettings = {
 const blankAcademic: AcademicSettings = {
   currentSchoolYear: "",
   currentSemester: "",
-  currentQuarter: "",
+  currentTerm: "",
   endOfSchoolYear: false,
   passingGrade: "",
   promotionPolicy: "",
@@ -452,8 +452,8 @@ export default function AdminSettingsPage() {
     if (section === "academic") {
       if (!academic.currentSchoolYear.trim())
         next.currentSchoolYear = "School year is required.";
-      if (!academic.currentQuarter.trim())
-        next.currentQuarter = "Quarter is required.";
+      if (!academic.currentTerm.trim())
+        next.currentTerm = "Term is required.";
       if (
         academic.gradeEncodingStatus === "OPEN" &&
         !academic.gradeEncodingDeadline
@@ -836,7 +836,7 @@ export default function AdminSettingsPage() {
                       setSection("academic", {
                         ...academic,
                         currentSchoolYear: value,
-                        currentQuarter: "Quarter 1",
+                        currentTerm: "Term 1",
                         endOfSchoolYear: false,
                       gradeEncodingStartDate: "",
                       gradeEncodingDeadline: "",
@@ -846,47 +846,37 @@ export default function AdminSettingsPage() {
                   }
                 />
                 <label className="font-medium text-slate-600">
-                  Active Quarter
+                  Active Term
                   <select
                     required
-                    value={academic.currentQuarter}
+                    value={academic.currentTerm}
                     onChange={(event) =>
                       setSection("academic", {
                         ...academic,
-                        currentQuarter: event.target.value,
+                        currentTerm: event.target.value,
                         endOfSchoolYear:
                           event.target.value === "End of School Year",
                       })
                     }
                     className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 outline-none focus:ring-2 focus:ring-slate-200"
                   >
-                    <option value="">Select active quarter</option>
+                    <option value="">Select active term</option>
                     {[
-                      "Quarter 1",
-                      "Quarter 2",
-                      "Quarter 3",
-                      "Quarter 4",
+                      "Term 1",
+                      "Term 2",
+                      "Term 3",
                       "End of School Year",
                     ].map(
-                      (quarter) => (
-                        <option key={quarter} value={quarter}>
-                          {quarter}
+                      (term) => (
+                        <option key={term} value={term}>
+                          {term}
                         </option>
                       ),
                     )}
                   </select>
-                  {errors.currentQuarter ? (
+                  {errors.currentTerm ? (
                     <span className="mt-1 block text-rose-600">
-                      {errors.currentQuarter}
-                    </span>
-                  ) : null}
-                  {gradeProgress?.academic.gradeEncodingQuarter ? (
-                    <span className="mt-1.5 block text-sm text-slate-500">
-                      Grade uploading is open for{" "}
-                      <strong className="text-slate-700">
-                        {gradeProgress.academic.gradeEncodingQuarter}
-                      </strong>
-                      .
+                      {errors.currentTerm}
                     </span>
                   ) : null}
                 </label>

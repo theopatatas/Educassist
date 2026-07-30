@@ -8,6 +8,10 @@ import { ParentStudent } from "../../db/models/ParentStudent.model";
 import { SchoolEvent } from "../../db/models/SchoolEvent.model";
 import { Student } from "../../db/models/Student.model";
 import { SystemAuditLog } from "../../db/models/SystemAuditLog.model";
+import {
+  normalizeAcademicTerm,
+  normalizeActiveAcademicTerm,
+} from "../../utils/academic-terms";
 import { Teacher } from "../../db/models/Teacher.model";
 import { TeacherLeaveRequest } from "../../db/models/TeacherLeaveRequest.model";
 import { User } from "../../db/models/User.model";
@@ -73,8 +77,11 @@ function auditPresentation(row: SystemAuditLog) {
   const academicYear = String(
     current.currentSchoolYear ?? previous.currentSchoolYear ?? "",
   );
-  const quarter = String(
-    current.currentQuarter ?? previous.currentQuarter ?? "",
+  const term = normalizeActiveAcademicTerm(
+    current.currentTerm ??
+      current["currentQuarter"] ??
+      previous.currentTerm ??
+      previous["currentQuarter"],
   );
   const presentations: Record<
     string,
@@ -165,11 +172,20 @@ function auditPresentation(row: SystemAuditLog) {
       category: "academic",
       href: "/admin/settings",
     },
-    ACADEMIC_QUARTER_CHANGED: {
-      title: `${quarter || "Active quarter"} activated`,
+    ACADEMIC_TERM_CHANGED: {
+      title: `${term || "Active term"} activated`,
       description: academicYear
-        ? `${quarter || "The active quarter"} was activated for Academic Year ${academicYear}.`
-        : "The active academic quarter was updated.",
+        ? `${term || "The active term"} was activated for Academic Year ${academicYear}.`
+        : "The active academic term was updated.",
+      module: "Academic Settings",
+      category: "academic",
+      href: "/admin/settings",
+    },
+    ACADEMIC_QUARTER_CHANGED: {
+      title: `${term || "Active term"} activated`,
+      description: academicYear
+        ? `${term || "The active term"} was activated for Academic Year ${academicYear}.`
+        : "The active academic term was updated.",
       module: "Academic Settings",
       category: "academic",
       href: "/admin/settings",
@@ -419,7 +435,13 @@ export async function getRecentActivities() {
     activities.push({
       id: `grade-${row.id}`,
       title: "Grades published",
-      description: `${String(row.name).split("|").slice(0, 2).join(" • ")} was published${row.academicYear ? ` for ${row.academicYear}` : ""}.`,
+      description: `${[
+        normalizeAcademicTerm(String(row.name).split("|")[0]) ||
+          String(row.name).split("|")[0],
+        String(row.name).split("|")[1],
+      ]
+        .filter(Boolean)
+        .join(" • ")} was published${row.academicYear ? ` for ${row.academicYear}` : ""}.`,
       user: userName(actor),
       role: roleLabel(actor?.role || "teacher"),
       module: "Grade Publishing",
@@ -570,14 +592,14 @@ export async function getPendingTasks() {
   ];
   if (
     !academic.currentSchoolYear ||
-    !academic.currentQuarter ||
+    !academic.currentTerm ||
     academic.gradeEncodingStatus === "UNAVAILABLE"
   ) {
     tasks.unshift({
       id: "academic-configuration",
       label: "Academic period requires configuration",
       description:
-        "Set the current academic year and active quarter in Settings.",
+        "Set the current academic year and active term in Settings.",
       count: 1,
       status: "critical",
       href: "/admin/settings",
